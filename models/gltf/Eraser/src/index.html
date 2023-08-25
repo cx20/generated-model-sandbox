@@ -137,7 +137,7 @@ function createEraserTexture(scene) {
     
     for (let i = 0; i < 6; i++) {
         let OFFSET_X = (i % 3) * (CANVAS_WIDTH / 4);
-        let OFFSET_Y = 256 - Math.floor(i / 3) * (CANVAS_HEIGHT / 2);
+        let OFFSET_Y = Math.floor(i / 3) * (CANVAS_HEIGHT / 2);
 
         if (i == 2 || i == 3 || i == 5) {
             ctx.fillStyle = "rgb(0, 128, 0)";
@@ -146,9 +146,11 @@ function createEraserTexture(scene) {
             ctx.fillStyle = "rgb(255, 255, 255)";
             ctx.fillRect(OFFSET_X + 64, OFFSET_Y + 256 / 3 * 1, 64 * 3, 256 / 3);
 
-            ctx.font = '49px serif';
-            ctx.fillStyle = "rgb(0, 0, 0)";
-            ctx.fillText("Eraser", OFFSET_X + 64 + 24, OFFSET_Y + 256 / 2 + 16);
+            if (i == 2 || i == 3) {
+                ctx.font = 'bold 49px sans-serif';
+                ctx.fillStyle = "rgb(0, 0, 0)";
+                ctx.fillText("Eraser", OFFSET_X + 64 + 12, OFFSET_Y + 256 / 2 + 16);
+            }
 
             ctx.fillStyle = "rgb(0, 0, 0)";
             ctx.fillRect(OFFSET_X + 64, OFFSET_Y + 256 / 3 * 2, 64 * 3, 256 / 3);
@@ -166,10 +168,7 @@ function createEraserTexture(scene) {
 
     }
     
-    //ctx.save();
-    //ctx.scale(-1, -1);
-
-    texture.update(false);
+    texture.update(true);
 
     return texture;
 }
