@@ -13,7 +13,7 @@ Sandbox for generated models
 
 ### Shogi Board
 
-[![Shogi Board](assets/screenshot/Shogi.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/ShogiBoard/src/index.html "Shogi Board")
+[![Shogi Board](assets/screenshot/ShogiBoard.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/ShogiBoard/src/index.html "Shogi Board")
 
 ### School Desk
 
