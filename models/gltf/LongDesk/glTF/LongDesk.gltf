@@ -1,6 +1,6 @@
 {
   "asset": {
-    "generator": "Babylon.js v6.18.0",
+    "generator": "Babylon.js v6.19.1",
     "version": "2.0"
   },
   "buffers": [
@@ -12,6 +12,11 @@
   "nodes": [
     {
       "name": "desk",
+      "translation": [
+        0,
+        14,
+        0
+      ],
       "mesh": 0,
       "rotation": [
         0,

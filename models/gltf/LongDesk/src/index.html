@@ -99,6 +99,7 @@ function addDesk(scene) {
     desk_top = BABYLON.MeshBuilder.CreateBox("desk_top", {height: 20*SCALE, width: 1800*SCALE, depth: 450*SCALE}, scene); 
     desk_top.material = material_desk_top;
     desk_top.parent = desk;
+    desk.position.y = 700 * SCALE;
     
     desk_leg1 = BABYLON.MeshBuilder.CreateBox("desk_leg1", {height: 700*SCALE, width: 15*SCALE, depth: 15*SCALE}, scene); 
     desk_leg2 = BABYLON.MeshBuilder.CreateBox("desk_leg2", {height: 700*SCALE, width: 15*SCALE, depth: 15*SCALE}, scene); 
