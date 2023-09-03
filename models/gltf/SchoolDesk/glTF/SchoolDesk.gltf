@@ -1,6 +1,6 @@
 {
   "asset": {
-    "generator": "Babylon.js v6.18.0",
+    "generator": "Babylon.js v6.19.1",
     "version": "2.0"
   },
   "buffers": [
@@ -102,7 +102,7 @@
       "name": "desk_bar_top_1to3",
       "translation": [
         0,
-        -1,
+        -2,
         3.5
       ],
       "mesh": 8
