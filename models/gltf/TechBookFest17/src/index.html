@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Tech Book Fest in Japan</title>
+
+        <!-- Babylon.js -->
+        <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script> -->
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+            
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+<body>
+    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+const SCALE = 1/50;
+
+/*
+This sample is a sample that simulates the event venue of the Japanese technical book.
+https://techbookfest.org/event/tbf17/offline/checklist
+*/
+const TARGET_BOOTH_IDs = ["け07","け08","す14"]; // ex) ["あ13", "こ02", ...]
+const BASE_ASSETS_URL = "https://cx20.github.io/jsdo.it-archives/assets/";
+
+let skyboxMaterial;
+let groundMaterial;
+let wallMaterial;
+let doorMaterial;
+let deskMaterial;
+
+let baseDeskA;
+let baseDeskB;
+let basePillarA;
+let basePillarB;
+let baseWall;
+
+var infoButton=null;
+
+const boothLayoutData = [
+    {id:"協01", item_type:"desk_a", x:129.04, y:0.35, z:26.0, rotate_y:90, circle_name:""},
+    {id:"協02", item_type:"desk_a", x:129.04, y:0.35, z:23.0, rotate_y:90, circle_name:""},
+    {id:"協03", item_type:"desk_a", x:129.04, y:0.35, z:20, rotate_y:90, circle_name:""},
+    {id:"協04", item_type:"desk_a", x:129.04, y:0.35, z:17.0, rotate_y:90, circle_name:""},
+    {id:"協05", item_type:"desk_a", x:129.04, y:0.35, z:14.0, rotate_y:90, circle_name:""},
+    {id:"協06", item_type:"desk_a", x:129.04, y:0.35, z:11.0, rotate_y:90, circle_name:""},
+    
+    
+    {id:"あ01", item_type:"desk_b", x:127.07, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"あ02", item_type:"desk_b", x:127.07, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"あ03", item_type:"desk_b", x:127.07, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"あ04", item_type:"desk_b", x:127.07, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"あ05", item_type:"desk_b", x:127.07, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"あ06", item_type:"desk_b", x:127.07, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"あ07", item_type:"desk_b", x:127.07, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"あ08", item_type:"desk_b", x:127.07, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"あ09", item_type:"desk_b", x:127.07, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"あ10", item_type:"desk_b", x:127.07, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"あ11", item_type:"desk_b", x:122.63, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"あ12", item_type:"desk_b", x:122.63, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"あ13", item_type:"desk_b", x:122.63, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"あ14", item_type:"desk_b", x:122.63, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"あ15", item_type:"desk_b", x:122.63, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"あ16", item_type:"desk_b", x:122.63, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"あ17", item_type:"desk_b", x:122.63, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"あ18", item_type:"desk_b", x:122.63, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"あ19", item_type:"desk_b", x:122.63, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"あ20", item_type:"desk_b", x:120.66, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"あ21", item_type:"desk_b", x:120.66, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"あ22", item_type:"desk_b", x:120.66, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"あ23", item_type:"desk_b", x:120.66, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"あ24", item_type:"desk_b", x:120.66, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"あ25", item_type:"desk_b", x:120.66, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"あ26", item_type:"desk_b", x:120.66, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"あ27", item_type:"desk_b", x:120.66, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"あ28", item_type:"desk_b", x:120.66, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"い01", item_type:"desk_b", x:116.23, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"い02", item_type:"desk_b", x:116.23, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"い03", item_type:"desk_b", x:116.23, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"い04", item_type:"desk_b", x:116.23, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"い05", item_type:"desk_b", x:116.23, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"い06", item_type:"desk_b", x:116.23, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"い07", item_type:"desk_b", x:116.23, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"い08", item_type:"desk_b", x:116.23, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"い09", item_type:"desk_b", x:116.23, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"い10", item_type:"desk_b", x:116.23, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"い11", item_type:"desk_b", x:114.26, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"い12", item_type:"desk_b", x:114.26, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"い13", item_type:"desk_b", x:114.26, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"い14", item_type:"desk_b", x:114.26, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"い15", item_type:"desk_b", x:114.26, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"い16", item_type:"desk_b", x:114.26, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"い17", item_type:"desk_b", x:114.26, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"い18", item_type:"desk_b", x:114.26, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"い19", item_type:"desk_b", x:114.26, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"い20", item_type:"desk_b", x:114.26, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"う01", item_type:"desk_b", x:109.83, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"う02", item_type:"desk_b", x:109.83, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"う03", item_type:"desk_b", x:109.83, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"う04", item_type:"desk_b", x:109.83, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"う05", item_type:"desk_b", x:109.83, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"う06", item_type:"desk_b", x:109.83, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"う07", item_type:"desk_b", x:109.83, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"う08", item_type:"desk_b", x:109.83, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"う09", item_type:"desk_b", x:109.83, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"う10", item_type:"desk_b", x:107.86, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"う11", item_type:"desk_b", x:107.86, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"う12", item_type:"desk_b", x:107.86, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"う13", item_type:"desk_b", x:107.86, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"う14", item_type:"desk_b", x:107.86, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"う15", item_type:"desk_b", x:107.86, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"う16", item_type:"desk_b", x:107.86, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"う17", item_type:"desk_b", x:107.86, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"う18", item_type:"desk_b", x:107.86, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    
+    {id:"え01", item_type:"desk_b", x:103.43, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"え02", item_type:"desk_b", x:103.43, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"え03", item_type:"desk_b", x:103.43, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"え04", item_type:"desk_b", x:103.43, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"え05", item_type:"desk_b", x:103.43, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"え06", item_type:"desk_b", x:103.43, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"え07", item_type:"desk_b", x:103.43, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"え08", item_type:"desk_b", x:103.43, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"え09", item_type:"desk_b", x:103.43, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"え10", item_type:"desk_b", x:103.43, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"え11", item_type:"desk_b", x:101.46, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"え12", item_type:"desk_b", x:101.46, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"え13", item_type:"desk_b", x:101.46, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"え14", item_type:"desk_b", x:101.46, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"え15", item_type:"desk_b", x:101.46, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"え16", item_type:"desk_b", x:101.46, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"え17", item_type:"desk_b", x:101.46, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"え18", item_type:"desk_b", x:101.46, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"え19", item_type:"desk_b", x:101.46, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"え20", item_type:"desk_b", x:101.46, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"お01", item_type:"desk_b", x:97.02, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"お02", item_type:"desk_b", x:97.02, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"お03", item_type:"desk_b", x:97.02, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"お04", item_type:"desk_b", x:97.02, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"お05", item_type:"desk_b", x:97.02, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"お06", item_type:"desk_b", x:97.02, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"お07", item_type:"desk_b", x:97.02, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"お08", item_type:"desk_b", x:97.02, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"お09", item_type:"desk_b", x:97.02, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"お10", item_type:"desk_b", x:95.05, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"お11", item_type:"desk_b", x:95.05, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"お12", item_type:"desk_b", x:95.05, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"お13", item_type:"desk_b", x:95.05, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"お14", item_type:"desk_b", x:95.05, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"お15", item_type:"desk_b", x:95.05, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"お16", item_type:"desk_b", x:95.05, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"お17", item_type:"desk_b", x:95.05, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"お18", item_type:"desk_b", x:95.05, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    
+    {id:"か01", item_type:"desk_b", x:90.62, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"か02", item_type:"desk_b", x:90.62, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"か03", item_type:"desk_b", x:90.62, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"か04", item_type:"desk_b", x:90.62, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"か05", item_type:"desk_b", x:90.62, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"か06", item_type:"desk_b", x:90.62, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"か07", item_type:"desk_b", x:90.62, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"か08", item_type:"desk_b", x:90.62, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"か09", item_type:"desk_b", x:90.62, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"か10", item_type:"desk_b", x:90.62, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"か11", item_type:"desk_b", x:88.65, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"か12", item_type:"desk_b", x:88.65, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"か13", item_type:"desk_b", x:88.65, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"か14", item_type:"desk_b", x:88.65, y:0.35, z:22.4, rotate_y:90, circle_name:""},
+    {id:"か15", item_type:"desk_b", x:88.65, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"か16", item_type:"desk_b", x:88.65, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"か17", item_type:"desk_b", x:88.65, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"か18", item_type:"desk_b", x:88.65, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"か19", item_type:"desk_b", x:88.65, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"か20", item_type:"desk_b", x:88.65, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    
+     {id:"き01", item_type:"desk_b", x:82.74, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"き02", item_type:"desk_b", x:82.74, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"き03", item_type:"desk_b", x:82.74, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"き04", item_type:"desk_b", x:82.74, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"き05", item_type:"desk_b", x:82.74, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"き06", item_type:"desk_b", x:80.77, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"き07", item_type:"desk_b", x:80.77, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"き08", item_type:"desk_b", x:80.77, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"き09", item_type:"desk_b", x:80.77, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"き10", item_type:"desk_b", x:80.77, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"き11", item_type:"desk_b", x:76.57, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"き12", item_type:"desk_b", x:76.57, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"き13", item_type:"desk_b", x:76.57, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"き14", item_type:"desk_b", x:76.57, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"き15", item_type:"desk_b", x:76.57, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"き16", item_type:"desk_b", x:74.60, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"き17", item_type:"desk_b", x:74.60, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"き18", item_type:"desk_b", x:74.60, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"き19", item_type:"desk_b", x:74.60, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"き20", item_type:"desk_b", x:74.60, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"く01", item_type:"desk_b", x:70.40, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"く02", item_type:"desk_b", x:70.40, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"く03", item_type:"desk_b", x:70.40, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"く04", item_type:"desk_b", x:70.40, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"く05", item_type:"desk_b", x:70.40, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"く06", item_type:"desk_b", x:68.43, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"く07", item_type:"desk_b", x:68.43, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"く08", item_type:"desk_b", x:68.43, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"く09", item_type:"desk_b", x:68.43, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"く10", item_type:"desk_b", x:68.43, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"く11", item_type:"desk_b", x:64.23, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"く12", item_type:"desk_b", x:64.23, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"く13", item_type:"desk_b", x:64.23, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"く14", item_type:"desk_b", x:64.23, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"く15", item_type:"desk_b", x:64.23, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"く16", item_type:"desk_b", x:62.26, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"く17", item_type:"desk_b", x:62.26, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"く18", item_type:"desk_b", x:62.26, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"く19", item_type:"desk_b", x:62.26, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"く20", item_type:"desk_b", x:62.26, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"け01", item_type:"desk_b", x:58.06, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"け02", item_type:"desk_b", x:58.06, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"け03", item_type:"desk_b", x:58.06, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"け04", item_type:"desk_b", x:58.06, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"け05", item_type:"desk_b", x:58.06, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"け06", item_type:"desk_b", x:56.09, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"け07", item_type:"desk_b", x:56.09, y:0.35, z:16.4, rotate_y:90, circle_name:"Babylon.js 勉強会"},
+    {id:"け08", item_type:"desk_b", x:56.09, y:0.35, z:14.4, rotate_y:90, circle_name:"にーLab."},
+    {id:"け09", item_type:"desk_b", x:56.09, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"け10", item_type:"desk_b", x:56.09, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"け11", item_type:"desk_b", x:51.89, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"け12", item_type:"desk_b", x:51.89, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"け13", item_type:"desk_b", x:51.89, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"け14", item_type:"desk_b", x:51.89, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"け15", item_type:"desk_b", x:51.89, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"け16", item_type:"desk_b", x:49.92, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"け17", item_type:"desk_b", x:49.92, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"け18", item_type:"desk_b", x:49.92, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"け19", item_type:"desk_b", x:49.92, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"け20", item_type:"desk_b", x:49.92, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    
+    {id:"こ01", item_type:"desk_b", x:45.72, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"こ02", item_type:"desk_b", x:45.72, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"こ03", item_type:"desk_b", x:45.72, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"こ04", item_type:"desk_b", x:45.72, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"こ05", item_type:"desk_b", x:45.72, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"こ06", item_type:"desk_b", x:43.75, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"こ07", item_type:"desk_b", x:43.75, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"こ08", item_type:"desk_b", x:43.75, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"こ09", item_type:"desk_b", x:43.75, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"こ10", item_type:"desk_b", x:43.75, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"こ11", item_type:"desk_b", x:39.55, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"こ12", item_type:"desk_b", x:39.55, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"こ13", item_type:"desk_b", x:39.55, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"こ14", item_type:"desk_b", x:39.55, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"こ15", item_type:"desk_b", x:39.55, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"こ16", item_type:"desk_b", x:39.55, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"こ17", item_type:"desk_b", x:37.58, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"こ18", item_type:"desk_b", x:37.58, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"こ19", item_type:"desk_b", x:37.58, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"こ20", item_type:"desk_b", x:37.58, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"こ21", item_type:"desk_b", x:37.58, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"こ22", item_type:"desk_b", x:37.58, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+        
+
+    {id:"さ01", item_type:"desk_b", x:33.00, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"さ02", item_type:"desk_b", x:33.00, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"さ03", item_type:"desk_b", x:33.00, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"さ04", item_type:"desk_b", x:33.00, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"さ05", item_type:"desk_b", x:33.00, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"さ06", item_type:"desk_b", x:33.00, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"さ07", item_type:"desk_b", x:33.00, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"さ08", item_type:"desk_b", x:33.00, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"さ09", item_type:"desk_b", x:33.00, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"さ10", item_type:"desk_b", x:33.00, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"さ11", item_type:"desk_b", x:33.00, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"さ12", item_type:"desk_b", x:33.00, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"さ13", item_type:"desk_b", x:31.12, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"さ14", item_type:"desk_b", x:31.12, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"さ15", item_type:"desk_b", x:31.12, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"さ16", item_type:"desk_b", x:31.12, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"さ17", item_type:"desk_b", x:31.12, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"さ18", item_type:"desk_b", x:31.12, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"さ19", item_type:"desk_b", x:31.12, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"さ20", item_type:"desk_b", x:31.12, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"さ21", item_type:"desk_b", x:31.12, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"さ22", item_type:"desk_b", x:31.12, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"さ23", item_type:"desk_b", x:31.12, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"さ24", item_type:"desk_b", x:31.12, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    {id:"し01", item_type:"desk_b", x:26.60, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"し02", item_type:"desk_b", x:26.60, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"し03", item_type:"desk_b", x:26.60, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"し04", item_type:"desk_b", x:26.60, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"し05", item_type:"desk_b", x:26.60, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"し06", item_type:"desk_b", x:26.60, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"し07", item_type:"desk_b", x:26.60, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"し08", item_type:"desk_b", x:26.60, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"し09", item_type:"desk_b", x:26.60, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"し10", item_type:"desk_b", x:26.60, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"し11", item_type:"desk_b", x:26.60, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"し12", item_type:"desk_b", x:26.60, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"し13", item_type:"desk_b", x:24.63, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"し14", item_type:"desk_b", x:24.63, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"し15", item_type:"desk_b", x:24.63, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"し16", item_type:"desk_b", x:24.63, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"し17", item_type:"desk_b", x:24.63, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"し18", item_type:"desk_b", x:24.63, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"し19", item_type:"desk_b", x:24.63, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"し20", item_type:"desk_b", x:24.63, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"し21", item_type:"desk_b", x:24.63, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"し22", item_type:"desk_b", x:24.63, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"し23", item_type:"desk_b", x:24.63, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"し24", item_type:"desk_b", x:24.63, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    
+    {id:"す01", item_type:"desk_b", x:20.19, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"す02", item_type:"desk_b", x:20.19, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"す03", item_type:"desk_b", x:20.19, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"す04", item_type:"desk_b", x:20.19, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"す05", item_type:"desk_b", x:20.19, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"す06", item_type:"desk_b", x:20.19, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"す07", item_type:"desk_b", x:20.19, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"す08", item_type:"desk_b", x:20.19, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"す09", item_type:"desk_b", x:20.19, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"す10", item_type:"desk_b", x:20.19, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"す11", item_type:"desk_b", x:20.19, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"す12", item_type:"desk_b", x:20.19, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+    {id:"す13", item_type:"desk_b", x:18.22, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    {id:"す14", item_type:"desk_b", x:18.22, y:0.35, z:32.4, rotate_y:90, circle_name:"かーでぃらぼ"},
+    {id:"す15", item_type:"desk_b", x:18.22, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"す16", item_type:"desk_b", x:18.22, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"す17", item_type:"desk_b", x:18.22, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"す18", item_type:"desk_b", x:18.22, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"す19", item_type:"desk_b", x:18.22, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"す20", item_type:"desk_b", x:18.22, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"す21", item_type:"desk_b", x:18.22, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"す22", item_type:"desk_b", x:18.22, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"す23", item_type:"desk_b", x:18.22, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"す24", item_type:"desk_b", x:18.22, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+    //{id:"せ01", item_type:"desk_b", x:12.61, y:0.35, z:34.4, rotate_y:90, circle_name:""},
+    //{id:"せ02", item_type:"desk_b", x:12.61, y:0.35, z:32.4, rotate_y:90, circle_name:""},
+    {id:"せ01", item_type:"desk_b", x:12.61, y:0.35, z:30.4, rotate_y:90, circle_name:""},
+    {id:"せ02", item_type:"desk_b", x:12.61, y:0.35, z:28.4, rotate_y:90, circle_name:""},
+    {id:"せ03", item_type:"desk_b", x:12.61, y:0.35, z:26.4, rotate_y:90, circle_name:""},
+    {id:"せ04", item_type:"desk_b", x:12.61, y:0.35, z:24.4, rotate_y:90, circle_name:""},
+    {id:"せ05", item_type:"desk_b", x:12.61, y:0.35, z:20.4, rotate_y:90, circle_name:""},
+    {id:"せ06", item_type:"desk_b", x:12.61, y:0.35, z:18.4, rotate_y:90, circle_name:""},
+    {id:"せ07", item_type:"desk_b", x:12.61, y:0.35, z:16.4, rotate_y:90, circle_name:""},
+    {id:"せ08", item_type:"desk_b", x:12.61, y:0.35, z:14.4, rotate_y:90, circle_name:""},
+    {id:"せ09", item_type:"desk_b", x:12.61, y:0.35, z:12.4, rotate_y:90, circle_name:""},
+    {id:"せ10", item_type:"desk_b", x:12.61, y:0.35, z:10.4, rotate_y:90, circle_name:""},
+
+];
+
+const pillarLayoutData = [
+    {id:"pillar_cylinder_01", item_type:"pillar_a", x:0, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_02", item_type:"pillar_a", x:12.8, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_03", item_type:"pillar_a", x:19.2, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_03a", item_type:"pillar_a2", x:25.4, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_04", item_type:"pillar_a", x:32, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_43a", item_type:"pillar_a2", x:38.4, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_05", item_type:"pillar_a", x:44.8, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_06", item_type:"pillar_a", x:57.6, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_07", item_type:"pillar_a", x:70.4, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_08", item_type:"pillar_a", x:83.2, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_09", item_type:"pillar_a", x:96, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_10", item_type:"pillar_a", x:108.8, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_11", item_type:"pillar_a", x:121.6, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_12", item_type:"pillar_a", x:134.4, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_13", item_type:"pillar_a", x:140.8, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_cylinder_14", item_type:"pillar_a", x:153.6, y:1.5, z:22.4, rotate_y:0},
+    {id:"pillar_box_01", item_type:"pillar_b", x:0, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_02", item_type:"pillar_b", x:12.8, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_03", item_type:"pillar_b", x:19.2, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_04", item_type:"pillar_b", x:32, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_05", item_type:"pillar_b", x:44.8, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_06", item_type:"pillar_b", x:57.6, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_07", item_type:"pillar_b", x:70.4, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_08", item_type:"pillar_b", x:83.2, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_09", item_type:"pillar_b", x:96, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_10", item_type:"pillar_b", x:108.8, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_11", item_type:"pillar_b", x:121.6, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_12", item_type:"pillar_b", x:134.4, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_13", item_type:"pillar_b", x:140.8, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_14", item_type:"pillar_b", x:153.6, y:1.5, z:6.3, rotate_y:0},
+    {id:"pillar_box_15", item_type:"pillar_b", x:0, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_16", item_type:"pillar_b", x:6.4, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_17", item_type:"pillar_b", x:12.8, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_18", item_type:"pillar_b", x:19.2, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_19", item_type:"pillar_b", x:32, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_20", item_type:"pillar_b", x:44.8, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_21", item_type:"pillar_b", x:57.6, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_22", item_type:"pillar_b", x:70.4, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_23", item_type:"pillar_b", x:83.2, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_24", item_type:"pillar_b", x:96, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_25", item_type:"pillar_b", x:108.8, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_26", item_type:"pillar_b", x:121.6, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_27", item_type:"pillar_b", x:134.4, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_28", item_type:"pillar_b", x:140.8, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_cylinder_15", item_type:"pillar_a", x:146.6, y:1.5, z:38.4, rotate_y:0},
+    {id:"pillar_box_29", item_type:"pillar_b", x:0, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_box_30", item_type:"pillar_b", x:6.4, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_16", item_type:"pillar_a", x:12.8, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_17", item_type:"pillar_a", x:19.2, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_18", item_type:"pillar_a", x:32, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_19", item_type:"pillar_a", x:44.8, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_20", item_type:"pillar_a", x:57.6, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_21", item_type:"pillar_a", x:70.4, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_22", item_type:"pillar_a", x:83.2, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_23", item_type:"pillar_a", x:96, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_24", item_type:"pillar_a", x:108.8, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_25", item_type:"pillar_a", x:121.6, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_26", item_type:"pillar_a", x:134.4, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_cylinder_27", item_type:"pillar_a", x:140.8, y:1.5, z:0, rotate_y:0},
+    {id:"pillar_box_31", item_type:"pillar_b", x:0, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_box_32", item_type:"pillar_b", x:6.4, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_28", item_type:"pillar_a", x:12.8, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_29", item_type:"pillar_a", x:19.2, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_30", item_type:"pillar_a", x:32, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_31", item_type:"pillar_a", x:44.8, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_32", item_type:"pillar_a", x:57.6, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_33", item_type:"pillar_a", x:70.4, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_34", item_type:"pillar_a", x:83.2, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_35", item_type:"pillar_a", x:96, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_36", item_type:"pillar_a", x:108.8, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_37", item_type:"pillar_a", x:121.6, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_38", item_type:"pillar_a", x:134.4, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_39", item_type:"pillar_a", x:140.8, y:1.5, z:44.8, rotate_y:0},
+    {id:"pillar_cylinder_40", item_type:"pillar_a", x:153.6, y:1.5, z:34, rotate_y:0},
+];
+
+const wallLayoutData = [
+    { "id":"wall_01", "x1": 6.4, "y1": 0, "z1": 5.9, "x2": 6.4, "y2": 3, "z2": 24 },
+    { "id":"wall_02", "x1": 6.4, "y1": 0, "z1": 24, "x2": 9.6, "y2": 3, "z2": 24 },
+    { "id":"wall_03", "x1": 9.6, "y1": 0, "z1": 24, "x2": 9.6, "y2": 3, "z2": 38 },
+    { "id":"wall_04", "x1": 6.4, "y1": 0, "z1": 38, "x2": 44.8, "y2": 3, "z2": 38 },
+    //{ "id":"wall_05", "x1": 44.8, "y1": 0, "z1": 38.4, "x2": 44.8, "y2": 3, "z2": 22.4 },
+    { "id":"wall_05_01", "x1": 44.8, "y1": 0, "z1": 22.4+3, "x2": 44.8, "y2": 3, "z2": 22.4 },
+    { "id":"wall_05_02", "x1": 44.8, "y1": 0, "z1": 38.4, "x2": 44.8, "y2": 3, "z2": 22.4+6 },
+    { "id":"wall_06", "x1": 44.8, "y1": 0, "z1": 22.4, "x2": 78.4, "y2": 3, "z2": 22.4 },
+    { "id":"wall_07", "x1": 78.4, "y1": 0, "z1": 22.4, "x2": 78.4, "y2": 3, "z2": 33.6 },
+    { "id":"wall_08", "x1": 78.4, "y1": 0, "z1": 33.6, "x2": 137.4, "y2": 3, "z2": 33.6 },
+    //{ "id":"wall_09", "x1": 137.4, "y1": 0, "z1": 33.6, "x2": 137.4, "y2": 3, "z2": 22.4 },
+    { "id":"wall_09_01", "x1": 137.4, "y1": 0, "z1": 22.4, "x2": 137.4, "y2": 3, "z2": 22.4+4 },
+    { "id":"wall_09_02", "x1": 137.4, "y1": 0, "z1": 22.4 + 6, "x2": 137.4, "y2": 3, "z2": 22.4 + 8 },
+    { "id":"wall_09_03", "x1": 137.4, "y1": 0, "z1": 22.4 + 10, "x2": 137.4, "y2": 3, "z2": 22.4 + 11.2 },
+    { "id":"wall_10", "x1": 137.4, "y1": 0, "z1": 22.4, "x2": 138.8, "y2": 3, "z2": 22.4 },
+    { "id":"wall_11", "x1": 138.8, "y1": 0, "z1": 22.4, "x2": 138.8, "y2": 3, "z2": 5.9 },
+    { "id":"wall_12", "x1": 138.8, "y1": 0, "z1": 5.9, "x2": 6.4, "y2": 3, "z2": 5.9 },
+
+    { "id":"wall_13", "x1": 6.4, "y1": 0, "z1": 37.9, "x2": 6.4, "y2": 3, "z2": 44.3 },
+    { "id":"wall_14", "x1": 6.4, "y1": 0, "z1": 44.3, "x2": 57.6, "y2": 3, "z2": 44.3 },
+    { "id":"wall_15", "x1": 57.6, "y1": 0, "z1": 44.3, "x2": 57.6, "y2": 3, "z2": 35.9 },
+    { "id":"wall_16", "x1": 57.6, "y1": 0, "z1": 35.9, "x2": 70.4, "y2": 3, "z2": 35.9 },
+    { "id":"wall_17", "x1": 6.4, "y1": 0, "z1": 40.4, "x2": 57.6, "y2": 3, "z2": 40.4 },
+    { "id":"wall_18", "x1": 70.4, "y1": 0, "z1": 35.9, "x2": 70.4, "y2": 3, "z2": 38.4 },
+    { "id":"wall_19", "x1": 70.4, "y1": 0, "z1": 38.4, "x2": 140.8, "y2": 3, "z2": 38.4 },
+    { "id":"wall_20", "x1": 140.8, "y1": 0, "z1": 38.4, "x2": 140.8, "y2": 3, "z2": 44.3 },
+    { "id":"wall_21", "x1": 140.8, "y1": 0, "z1": 44.3, "x2": 70.4, "y2": 3, "z2": 44.3 },
+
+    { "id":"wall_22", "x1": 6.4, "y1": 0, "z1": 0, "x2": 6.4, "y2": 3, "z2": 4 },
+    { "id":"wall_23", "x1": 6.4, "y1": 0, "z1": 4, "x2": 19.2, "y2": 3, "z2": 4 },
+    { "id":"wall_24", "x1": 19.2, "y1": 0, "z1": 4, "x2": 19.2, "y2": 3, "z2": 0 },
+    { "id":"wall_25", "x1": 19.2, "y1": 0, "z1": 0, "x2": 6.4, "y2": 3, "z2": 0 },
+
+    { "id":"wall_26", "x1": 22, "y1": 0, "z1": 0, "x2": 22, "y2": 3, "z2": 4 },
+    { "id":"wall_27", "x1": 22, "y1": 0, "z1": 4, "x2": 60.4, "y2": 3, "z2": 4 },
+    { "id":"wall_28", "x1": 60.4, "y1": 0, "z1": 4, "x2": 60.4, "y2": 3, "z2": 0 },
+    { "id":"wall_29", "x1": 60.4, "y1": 0, "z1": 0, "x2": 22, "y2": 3, "z2": 0 },
+
+    { "id":"wall_30", "x1": 66.8, "y1": 0, "z1": 0, "x2": 66.8, "y2": 3, "z2": 4 },
+    { "id":"wall_31", "x1": 66.8, "y1": 0, "z1": 4, "x2": 101.2, "y2": 3, "z2": 4 },
+    { "id":"wall_32", "x1": 101.2, "y1": 0, "z1": 4, "x2": 101.2, "y2": 3, "z2": 0 },
+    { "id":"wall_33", "x1": 101.2, "y1": 0, "z1": 0, "x2": 66.8, "y2": 3, "z2": 0 },
+
+    { "id":"wall_34", "x1": 105.2, "y1": 0, "z1": 0, "x2": 105.2, "y2": 3, "z2": 4 },
+    { "id":"wall_35", "x1": 105.2, "y1": 0, "z1": 4, "x2": 137.2, "y2": 3, "z2": 4 },
+    { "id":"wall_36", "x1": 137.2, "y1": 0, "z1": 4, "x2": 137.2, "y2": 3, "z2": 0 },
+    { "id":"wall_37", "x1": 137.2, "y1": 0, "z1": 0, "x2": 105.2, "y2": 3, "z2": 0 },
+];
+
+let doorLayoutData = [
+    //{ "id":"door_01", "x1": 137.2, "y1": 0, "z1": 32, "x2": 138, "y2": 2.8, "z2": 30 },
+    //{ "id":"door_02", "x1": 137.2, "y1": 0, "z1": 28, "x2": 138, "y2": 2.8, "z2": 26 },
+    //{ "id":"door_03", "x1": 44.6, "y1": 0, "z1": 30, "x2": 46, "y2": 2.8, "z2": 28 },
+    //{ "id":"door_04", "x1": 44.6, "y1": 0, "z1": 28, "x2": 46, "y2": 2.8, "z2": 26 },
+];
+
+const initMaterial = function (scene) {
+    wallMaterial = new BABYLON.StandardMaterial("wallMaterial", scene);
+    wallMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 1);
+
+    deskMaterial = new BABYLON.StandardMaterial("wallMaterial", scene);
+    deskMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 0);
+
+    doorMaterial = new BABYLON.StandardMaterial("doorMaterial", scene);
+    doorMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 1);
+}
+
+const initBaseMesh = function (scene) {
+    basePillarA = BABYLON.MeshBuilder.CreateCylinder("base_pillar_a", { height: 3, diameter: 1.8 });
+    basePillarA2 = BABYLON.MeshBuilder.CreateCylinder("base_pillar_a2", { height: 3, diameter: 0.8 });
+    basePillarB = BABYLON.MeshBuilder.CreateBox("base_pillar_b", { height: 3, width: 1.8, depth: 1.8 });
+    baseDeskA = BABYLON.MeshBuilder.CreateBox("base_desk_a", { width: 1.8*1.5, height: 0.7, depth: 0.45*1.5 });
+    baseDeskB = BABYLON.MeshBuilder.CreateBox("base_desk_b", { width: 1.8, height: 0.7, depth: 0.45 });
+    baseWall = BABYLON.MeshBuilder.CreateBox("base_wall", {});
+    baseDoor = BABYLON.MeshBuilder.CreateBox("base_door", {});
+
+    baseDeskA.material = deskMaterial;
+    baseDeskB.material = deskMaterial;
+    baseWall.material = wallMaterial;
+    baseDoor.material = doorMaterial;
+}
+
+const initControl = function(scene){
+    let guiCanvas = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+        infoButton = BABYLON.GUI.Button.CreateSimpleButton("infoButton", "");
+        infoButton.width = "300px"
+        infoButton.height = "80px";
+        infoButton.top = "10px";
+        infoButton.color = "white";
+        infoButton.cornerRadius = 5;
+        infoButton.background = "gray";
+        infoButton.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        infoButton.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        guiCanvas.addControl(infoButton);
+}
+
+const createScene = function () {
+    const scene = new BABYLON.Scene(engine);
+
+    const camera = new BABYLON.ArcRotateCamera("Camera", 0, 0, 0, BABYLON.Vector3.Zero(), scene);
+    camera.position = new BABYLON.Vector3(180, 20, 30);
+    camera.setTarget(new BABYLON.Vector3(160 / 2, 0, 46 / 2));
+    camera.attachControl(canvas, true);
+    camera.wheelDeltaPercentage = 0.005;
+
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 0.8;
+
+    initMaterial(scene);
+    initBaseMesh(scene);
+    //initControl(scene);
+
+    // Skybox
+    //const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 1000 }, scene);
+    //skybox.material = skyboxMaterial;
+
+    // Our built-in 'ground' shape.
+    const ground = BABYLON.MeshBuilder.CreateBox("ground", { width: 160, height: 0.1, depth: 46 }, scene);
+    ground.position = new BABYLON.Vector3(80, 0, 23);
+    //ground.material = groundMaterial;
+    //ground.material.wireframe = false;
+
+    // 壁
+    for (let i = 0; i < wallLayoutData.length; i++) {
+        let wallLayout = wallLayoutData[i];
+       plotMesh2(baseWall, wallLayout, scene);
+    }
+
+    // 柱
+    for (let i = 0; i < pillarLayoutData.length; i++) {
+        let pillarLayout = pillarLayoutData[i];
+        if (pillarLayout.item_type == "pillar_a") {
+            plotMesh(basePillarA, pillarLayout, scene);    
+        } else if (pillarLayout.item_type == "pillar_a2") {
+            plotMesh(basePillarA2, pillarLayout, scene);    
+        } else if (pillarLayout.item_type == "pillar_b") {
+            plotMesh(basePillarB, pillarLayout, scene);    
+        }
+    }
+
+    // 出入口
+    for (let i = 0; i < doorLayoutData.length; i++) {
+        let doorLayout = doorLayoutData[i];
+        plotMesh2(baseDoor, doorLayout, scene);
+    }
+
+    // ブース
+    for (let i = 0; i < boothLayoutData.length; i++) {
+        let boothLayout = boothLayoutData[i];
+        
+        if (boothLayout.item_type == "desk_a") {
+            plotMesh(baseDeskA, boothLayout, scene);
+        }
+        else if (boothLayout.item_type == "desk_b") {
+            plotMesh(baseDeskB, boothLayout, scene);
+        }
+    }
+
+    return scene;
+};
+
+const plotMesh = function (baseMesh, layout, scene) {
+    let mesh = baseMesh.createInstance(`${layout.id}`);
+    mesh.position.x = layout.x;
+    mesh.position.y = layout.y;
+    mesh.position.z = layout.z;
+    mesh.rotation.y = BABYLON.Tools.ToRadians(layout.rotate_y);
+    mesh.circle_name = layout.circle_name;
+    mesh.item_type = layout.item_type;
+}
+
+const plotMesh2 = function (baseMesh, layout, scene) {
+    let mesh = baseMesh.createInstance(`${layout.id}`);
+
+    let id = layout.id;
+    let x1 = layout.x1;
+    let y1 = layout.y1;
+    let z1 = layout.z1;
+    let x2 = layout.x2;
+    let y2 = layout.y2;
+    let z2 = layout.z2;
+
+    if (x1 == x2) { x2 = x2 + 0.2 }
+    if (z1 == z2) { z2 = z2 + 0.2 }
+    if (x1 > x2) { [x1, x2] = [x2, x1]; }
+    if (z1 > z2) { [z1, z2] = [z2, z1]; }
+
+    if (id == null || id == undefined) {
+        id = "";
+    }
+
+    let x = x1 + Math.abs(x1 - x2) / 2;
+    let y = y1 + Math.abs(y1 - y2) / 2;
+    let z = z1 + Math.abs(z1 - z2) / 2;
+    let width = Math.abs(x1 - x2);
+    let height = Math.abs(y1 - y2);
+    let depth = Math.abs(z1 - z2);
+
+    mesh.position.x = x;
+    mesh.position.y = y;
+    mesh.position.z = z;
+    mesh.scaling = new BABYLON.Vector3(width, height, depth);
+}
+
+const setParticle= function (boothId, scene ) {
+    const deskB = scene.getMeshById("base_desk_b");
+    const clone = deskB.clone("desk_b_clone");
+    const myBooth = scene.getMeshById(`${boothId}`);
+    clone.position = myBooth.position.clone();
+    clone.rotation = myBooth.rotation.clone();
+    const highlighter = new BABYLON.HighlightLayer("highlighter", scene);
+    highlighter.addMesh(clone, BABYLON.Color3.Yellow());
+
+    const radius = 2;
+    const angle = Math.PI / 10;
+
+    const particleSystem = new BABYLON.ParticleSystem("particles_"+ myBooth.name, 2000, scene);
+    particleSystem.particleTexture = new BABYLON.Texture("textures/flare.png", scene);
+
+    particleSystem.emitter = BABYLON.Vector3.Zero(); // the starting location
+    particleSystem.emitter.z = myBooth.position.z;
+    particleSystem.emitter.x = myBooth.position.x;
+
+    particleSystem.color1 = new BABYLON.Color4(0.77, 0.81, 0.45);
+    particleSystem.color2 = new BABYLON.Color4(0.89, 0.36, 0.73);
+    particleSystem.colorDead = new BABYLON.Color4(0, 0, 0.2, 0.0);
+    particleSystem.minSize = 0.1;
+    particleSystem.maxSize = 0.5;
+    particleSystem.minLifeTime = 0.3;
+    particleSystem.maxLifeTime = 1.5;
+    particleSystem.emitRate = 1000;
+    particleSystem.createConeEmitter(radius, angle);
+    particleSystem.minEmitPower = 2;
+    particleSystem.maxEmitPower = 4;
+    particleSystem.updateSpeed = 0.005;
+    particleSystem.start();
+
+}
+                window.initFunction = async function() {
+                    
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene                    
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
