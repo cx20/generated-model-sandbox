@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script> -->
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+            
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+<body>
+    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <script>
+var canvas = document.getElementById("renderCanvas");
+
+var startRenderLoop = function (engine, canvas) {
+  engine.runRenderLoop(function () {
+    if (sceneToRender && sceneToRender.activeCamera) {
+      sceneToRender.render();
+    }
+  });
+}
+
+var engine = null;
+var scene = null;
+var sceneToRender = null;
+var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, disableWebGL2Support: false }); };
+var createScene = async function () {
+  // Create the scene
+  var scene = new BABYLON.Scene(engine);
+
+  // Camera settings
+  var camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 4, Math.PI / 3, 10, BABYLON.Vector3.Zero(), scene);
+  camera.attachControl(canvas, true);
+
+  // Light settings
+  var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+  light.intensity = 0.7;
+
+  // Prepare materials
+  var orangeMaterial = new BABYLON.StandardMaterial("orangeMaterial", scene);
+  //orangeMaterial.diffuseColor = new BABYLON.Color3(1, 0.5, 0.2); // Orange color
+  orangeMaterial.diffuseColor = new BABYLON.Color3(224 / 255, 104 / 255, 75 / 255); // Orange color
+
+  var whiteMaterial = new BABYLON.StandardMaterial("whiteMaterial", scene);
+  whiteMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1); // White color
+
+  // Cube 0 (White, size 0.001)
+  var cube0 = BABYLON.MeshBuilder.CreateBox("cube0", { size: 0.001 }, scene);
+
+  // Cube A (Orange, size 3)
+  var cubeA = BABYLON.MeshBuilder.CreateBox("cubeA", { size: 3 }, scene);
+  cubeA.material = orangeMaterial;
+  cubeA.setEnabled(false); // Hidden for CSG operation
+
+  // Cube B (White, size 2)
+  var cubeB = BABYLON.MeshBuilder.CreateBox("cubeB", { size: 2 }, scene);
+  cubeB.material = whiteMaterial;
+  cubeB.position.x += 0.5;
+  cubeB.position.y += 0.5;
+  cubeB.position.z -= 0.5;
+  cubeB.setEnabled(false); // Hidden for CSG operation
+
+  // Cube C (Orange, size 1)
+  var cubeC = BABYLON.MeshBuilder.CreateBox("cubeC", { size: 1 }, scene);
+  cubeC.material = orangeMaterial;
+  cubeC.position.x += 1;
+  cubeC.position.y += 1;
+  cubeC.position.z -= 1;
+  cubeC.setEnabled(false); // Hidden for CSG operation
+
+  // Cube C2 (Orange, size 1)
+  var cubeC2 = BABYLON.MeshBuilder.CreateBox("cubeC2", { size: 1 }, scene);
+  cubeC2.material = orangeMaterial;
+  cubeC2.position.x += 1.001;
+  cubeC2.position.y += 1.001;
+  cubeC2.position.z -= 1.001;
+  cubeC2.setEnabled(false); // Hidden for CSG operation
+
+  // Cube D (White, size 1)
+  var cubeD = BABYLON.MeshBuilder.CreateBox("cubeD", { size: 1 }, scene);
+  cubeD.material = whiteMaterial;
+  cubeD.position.x += 0;
+  cubeD.position.y += 1;
+  cubeD.position.z += 1;
+  cubeD.setEnabled(false); // Hidden for CSG operation
+
+  // Initialize CSG2 (asynchronous)
+  await BABYLON.InitializeCSG2Async();
+
+  // Convert to CSG2 objects
+  const csgA = BABYLON.CSG2.FromMesh(cubeA);
+  const csgB = BABYLON.CSG2.FromMesh(cubeB);
+  const csgC = BABYLON.CSG2.FromMesh(cubeC);
+  const csgC2 = BABYLON.CSG2.FromMesh(cubeC2);
+  const csgD = BABYLON.CSG2.FromMesh(cubeD);
+
+  // Execute difference operation (subtract cube C from cube B)
+  var csgAB = csgA.subtract(csgB);
+  var csgBC = csgB.subtract(csgC);
+  var csgABD = csgAB.subtract(csgD);
+  var csgBC = csgBC.add(csgD);
+  var csgC3 = csgC.subtract(csgC2);
+
+  const resultMesh1 = csgABD.toMesh("hollowCube1");
+  const resultMesh2 = csgBC.toMesh("hollowCube2");
+  const resultMesh3 = csgC3.toMesh("hollowCube3");
+
+  resultMesh2.position.x += 0.5;
+  resultMesh2.position.y += 0.5;
+  resultMesh2.position.z -= 0;
+
+  resultMesh3.position.x += 1;
+  resultMesh3.position.y += 1;
+  resultMesh3.position.z -= 1;
+
+  // Apply orange material to the resulting mesh
+  resultMesh1.material = orangeMaterial;
+  resultMesh2.material = whiteMaterial;
+  resultMesh3.material = orangeMaterial;
+
+  resultMesh1.parent = cube0;
+  resultMesh2.parent = cube0;
+  resultMesh3.parent = cube0;
+
+  // Rotation animation to better visualize the result
+/*
+    var alpha = 0;
+    scene.registerBeforeRender(function () {
+        cube0.rotation.y = alpha;
+        alpha += 0.01;
+    });
+*/
+
+  return scene;
+};
+
+window.initFunction = async function() {
+
+  var asyncEngineCreation = async function() {
+    try {
+      return createDefaultEngine();
+    } catch(e) {
+      console.log("the available createEngine function failed. Creating the default engine instead");
+      return createDefaultEngine();
+    }
+  }
+
+  window.engine = await asyncEngineCreation();
+
+  const engineOptions = window.engine.getCreationOptions?.();
+  if (!engineOptions || engineOptions.audioEngine !== false) {
+
+  }
+  if (!engine) throw 'engine should not be null.';
+  startRenderLoop(engine, canvas);
+  window.scene = createScene();
+};
+initFunction().then(() => {
+  scene.then(returnedScene => { sceneToRender = returnedScene; });
+});
+
+// Resize
+window.addEventListener("resize", function () {
+  engine.resize();
+});
+
+    </script>
+</body>
+</html>

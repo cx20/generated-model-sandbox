@@ -8,3 +8,4 @@ Sandbox for generated models
 [![Shogi Board](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/ShogiBoard_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/ShogiBoard/src/index.html)
 [![School Desk](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/SchoolDesk_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/SchoolDesk/src/index.html)
 [![Long Desk](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/LongDesk_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/LongDesk/src/index.html)
+[![Babylon Logo](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/BabylonLogo_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/BabylonLogo/src/index.html)
