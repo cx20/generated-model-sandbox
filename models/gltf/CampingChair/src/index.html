@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+            
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+<body>
+    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+
+const createScene = () => {
+    const scene = new BABYLON.Scene(engine);
+    
+    // Camera
+    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 3, 8, new BABYLON.Vector3(0, 1, 0), scene);
+    camera.attachControl(canvas, true);
+    
+    // Lights
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    light.intensity = 0.9;
+    const light2 = new BABYLON.DirectionalLight("light2", new BABYLON.Vector3(-1, -1, 1), scene);
+    light2.intensity = 0.5;
+    
+    // Materials
+    const fabricMat = new BABYLON.StandardMaterial("fabricMat", scene);
+    fabricMat.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+    
+    const frameMat = new BABYLON.StandardMaterial("frameMat", scene);
+    frameMat.diffuseColor = new BABYLON.Color3(0.08, 0.08, 0.08);
+    frameMat.specularColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+    
+    // Function to create a pipe between two points
+    const createPipeBetweenPoints = (name, point1, point2, diameter = 0.075) => {
+        const distance = BABYLON.Vector3.Distance(point1, point2);
+        const pipe = BABYLON.MeshBuilder.CreateCylinder(name, {
+            height: distance,
+            diameter: diameter
+        }, scene);
+        
+        // Position at the center point
+        pipe.position = BABYLON.Vector3.Center(point1, point2);
+        
+        // Calculate direction vector
+        const direction = point2.subtract(point1);
+        direction.normalize();
+        
+        // Calculate rotation from Y-axis to target direction
+        const yAxis = new BABYLON.Vector3(0, 1, 0);
+        const rotationAxis = BABYLON.Vector3.Cross(yAxis, direction);
+        const angle = Math.acos(BABYLON.Vector3.Dot(yAxis, direction));
+        
+        if (rotationAxis.length() > 0.001) {
+            rotationAxis.normalize();
+            pipe.rotationQuaternion = BABYLON.Quaternion.RotationAxis(rotationAxis, angle);
+        }
+        
+        pipe.material = frameMat;
+        return pipe;
+    };
+    
+    // Seat
+    const seat = BABYLON.MeshBuilder.CreateBox("seat", {
+        width: 1.6,
+        height: 0.08,
+        depth: 1.4
+    }, scene);
+    seat.position.y = 1.15;
+    seat.position.z = 0.0;
+    seat.material = fabricMat;
+    
+    // Backrest
+    const backrest = BABYLON.MeshBuilder.CreateBox("backrest", {
+        width: 1.6,
+        height: 1.3,
+        depth: 0.08
+    }, scene);
+    backrest.position.y = 1.9;
+    backrest.position.z = -0.7;
+    backrest.rotation.x = -0.15;
+    backrest.material = fabricMat;
+
+    
+    // Left X-frame four corner points
+    const leftTopFront = new BABYLON.Vector3(-0.68, 1.5 * 0.75, 0.6);
+    const leftTopBack = new BABYLON.Vector3(-0.68, 1.5 * 0.75, -0.7);
+    const leftBottomFront = new BABYLON.Vector3(-0.68, 0, 0.6);
+    const leftBottomBack = new BABYLON.Vector3(-0.68, 0, -0.7);
+    
+    // Left X-frame (diagonal cross)
+    createPipeBetweenPoints("leftPipe_TopFrontToBottomBack", leftTopFront, leftBottomBack);
+    createPipeBetweenPoints("leftPipe_TopBackToBottomFront", leftTopBack, leftBottomFront);
+    
+    // Right X-frame four corner points
+    const rightTopFront = new BABYLON.Vector3(0.68, 1.5 * 0.75, 0.6);
+    const rightTopBack = new BABYLON.Vector3(0.68, 1.5 * 0.75, -0.7);
+    const rightBottomFront = new BABYLON.Vector3(0.68, 0, 0.6);
+    const rightBottomBack = new BABYLON.Vector3(0.68, 0, -0.7);
+    
+    // Right X-frame (diagonal cross)
+    createPipeBetweenPoints("rightPipe_TopFrontToBottomBack", rightTopFront, rightBottomBack);
+    createPipeBetweenPoints("rightPipe_TopBackToBottomFront", rightTopBack, rightBottomFront);
+    
+    // Bottom horizontal bar (front)
+    createPipeBetweenPoints(
+        "bottomBar_Front",
+        new BABYLON.Vector3(-0.68, 0.12, 0.6 - 0.1),
+        new BABYLON.Vector3(0.68, 0.12, 0.6 - 0.1),
+        0.06
+    );
+    
+    // Bottom horizontal bar (back)
+    createPipeBetweenPoints(
+        "bottomBar_Back",
+        new BABYLON.Vector3(-0.68, 0.12, -0.6),
+        new BABYLON.Vector3(0.68, 0.12, -0.6),
+        0.06
+    );
+   
+    return scene;
+};
+                window.initFunction = async function() {
+                    
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene                    
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
