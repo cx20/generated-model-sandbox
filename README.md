@@ -9,3 +9,4 @@ Sandbox for generated models
 [![School Desk](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/SchoolDesk_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/SchoolDesk/src/index.html)
 [![Long Desk](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/LongDesk_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/LongDesk/src/index.html)
 [![Babylon Logo](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/BabylonLogo_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/BabylonLogo/src/index.html)
+[![Kuri Manju](https://github.com/cx20/generated-model-sandbox/raw/master/assets/screenshot/KuriManju_256x256.jpg)](https://cx20.github.io/generated-model-sandbox/models/gltf/KuriManju/src/index.html)
