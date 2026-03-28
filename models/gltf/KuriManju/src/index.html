@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+            
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+<body>
+    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+        const BASE_SIZE = 2;
+
+// =====================================================
+// createScene function for Babylon.js Playground
+// Theme: Kurimanju (chestnut bun) - a traditional Japanese sweet
+//
+// Key points:
+//  1. Set updatable: true so the vertex buffer can be updated
+//  2. Scale the mesh into an oval shape with mesh.scaling,
+//     then bake it into the vertices with
+//     bakeCurrentTransformIntoVertices()
+//  3. After that, perform vertex edits such as flattening the bottom
+//  -> This keeps the result consistent in both Playground display
+//     and glTF export
+// =====================================================
+var createScene = function () {
+    var scene = new BABYLON.Scene(engine);
+
+    // -----------------------------------------------
+    // Camera setup
+    // -----------------------------------------------
+    var camera = new BABYLON.ArcRotateCamera(
+        "camera",
+        -Math.PI / 3.5,
+        Math.PI / 3.2,
+        10,
+        new BABYLON.Vector3(0, -0.05, 0),
+        scene
+    );
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 2;
+    camera.upperRadiusLimit = 8;
+    camera.wheelDeltaPercentage = 0.02;
+
+    const cubeTexture = new BABYLON.CubeTexture("textures/Studio_Softbox_2Umbrellas_cube_specular.env", scene);
+    const currentSkybox = scene.createDefaultSkybox(cubeTexture, true);
+
+    // -----------------------------------------------
+    // Lighting
+    // -----------------------------------------------
+    var hemiLight = new BABYLON.HemisphericLight(
+        "hemiLight",
+        new BABYLON.Vector3(0, 1, 0),
+        scene
+    );
+    hemiLight.intensity = 0.7;
+    hemiLight.diffuse = new BABYLON.Color3(1.0, 0.97, 0.93);
+    hemiLight.groundColor = new BABYLON.Color3(0.4, 0.35, 0.30);
+
+    var dirLight = new BABYLON.DirectionalLight(
+        "dirLight",
+        new BABYLON.Vector3(-0.4, -0.9, -0.3),
+        scene
+    );
+    dirLight.intensity = 0.6;
+    dirLight.diffuse = new BABYLON.Color3(1.0, 0.92, 0.80);
+
+    var pointLight = new BABYLON.PointLight(
+        "pointLight",
+        new BABYLON.Vector3(1.2, 2.0, 0.6),
+        scene
+    );
+    pointLight.intensity = 0.3;
+    pointLight.diffuse = new BABYLON.Color3(1.0, 0.96, 0.88);
+
+    var fillLight = new BABYLON.PointLight(
+        "fillLight",
+        new BABYLON.Vector3(-0.8, 0.5, 1.0),
+        scene
+    );
+    fillLight.intensity = 0.15;
+    fillLight.diffuse = new BABYLON.Color3(1.0, 0.98, 0.95);
+
+    // -----------------------------------------------
+    // Create the base mesh for the chestnut bun
+    // Setting updatable: true ensures the vertex buffer can be updated
+    // -----------------------------------------------
+    var manju = BABYLON.MeshBuilder.CreateSphere("manju", {
+        diameter: 2,
+        segments: 64,
+        updatable: true
+    }, scene);
+
+    // -----------------------------------------------
+    // Step 1: Make the mesh oval using mesh.scaling
+    // -----------------------------------------------
+    manju.scaling = new BABYLON.Vector3(1.6, 0.85, 1.2);
+
+    // -----------------------------------------------
+    // Step 2: Bake the scaling into the vertex positions
+    // This resets mesh.scaling to (1,1,1),
+    // and the vertex positions themselves become oval-shaped
+    // -----------------------------------------------
+    manju.bakeCurrentTransformIntoVertices();
+
+    // -----------------------------------------------
+    // Step 3: Edit vertex positions
+    // (flatten the bottom + puff up the top)
+    // Since this is after baking, the coordinates are already
+    // in the scaled oval space
+    // -----------------------------------------------
+    var positions = manju.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+
+    // Get the Y-coordinate range in advance
+    var minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < positions.length; i += 3) {
+        if (positions[i + 1] < minY) minY = positions[i + 1];
+        if (positions[i + 1] > maxY) maxY = positions[i + 1];
+    }
+    // After baking: minY ≈ -0.85, maxY ≈ 0.85
+
+    // Threshold for flattening the bottom
+    // (around the lower 15% of the oval in Y space)
+    var flattenThreshold = minY + (maxY - minY) * 0.15;
+    var flatY = flattenThreshold;
+
+    for (var i = 0; i < positions.length; i += 3) {
+        var y = positions[i + 1];
+
+        // Flatten the bottom:
+        // align vertices below the threshold to a nearly constant Y
+        if (y < flattenThreshold) {
+            // Do not make it perfectly flat;
+            // leave a slight curve for a more natural bottom surface
+            var blend = (flattenThreshold - y) / (flattenThreshold - minY);
+            positions[i + 1] = flattenThreshold - blend * 0.02;
+        }
+
+        // Puff up the top surface
+        var nyLocal = (y - minY) / (maxY - minY);
+        if (nyLocal > 0.6) {
+            var factor = (nyLocal - 0.6) / 0.4;
+            factor = factor * factor;
+            positions[i + 1] += factor * 0.08;
+        }
+    }
+
+    manju.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+
+    // Recalculate normals
+    var normals = manju.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+    var indices = manju.getIndices();
+    BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+    manju.updateVerticesData(BABYLON.VertexBuffer.NormalKind, normals);
+
+    // -----------------------------------------------
+    // Vertex colors:
+    // concentrate the baked brown coloring on the upper third
+    // -----------------------------------------------
+    var colors = [];
+
+    // Color palette
+    var deepBrown   = { r: 0.45, g: 0.18, b: 0.06 };
+    var redBrown    = { r: 0.60, g: 0.25, b: 0.10 };
+    var warmBrown   = { r: 0.72, g: 0.38, b: 0.15 };
+    var lightBrown  = { r: 0.78, g: 0.52, b: 0.25 };
+    var transition  = { r: 0.88, g: 0.72, b: 0.50 };
+    var paleCream   = { r: 0.96, g: 0.91, b: 0.83 };
+    var paleBottom  = { r: 0.97, g: 0.94, b: 0.88 };
+
+    var noise = function(x, z, freq) {
+        return Math.sin(x * freq + 0.5) * Math.cos(z * freq * 0.7 + 0.3) +
+                Math.sin(x * freq * 1.3 + 2.1) * Math.cos(z * freq * 0.9 + 1.7) * 0.5;
+    };
+
+    var lerpColor = function(c1, c2, t) {
+        t = Math.max(0, Math.min(1, t));
+        return {
+            r: c1.r + (c2.r - c1.r) * t,
+            g: c1.g + (c2.g - c1.g) * t,
+            b: c1.b + (c2.b - c1.b) * t
+        };
+    };
+
+    // Recalculate the Y-coordinate range after editing
+    minY = Infinity; maxY = -Infinity;
+    for (var i = 0; i < positions.length; i += 3) {
+        if (positions[i + 1] < minY) minY = positions[i + 1];
+        if (positions[i + 1] > maxY) maxY = positions[i + 1];
+    }
+
+    for (var i = 0; i < positions.length; i += 3) {
+        var x = positions[i];
+        var y = positions[i + 1];
+        var z = positions[i + 2];
+
+        var ny = (y - minY) / (maxY - minY);
+
+        var totalNoise = noise(x, z, 3.5) * 0.06 +
+                            noise(x, z, 7.5) * 0.03 +
+                            noise(x, z, 13.0) * 0.015;
+
+        var col;
+
+        if (ny > 0.90) {
+            var t = (ny - 0.90) / 0.10;
+            col = lerpColor(redBrown, deepBrown, t + totalNoise * 1.5);
+        } else if (ny > 0.80) {
+            var t = (ny - 0.80) / 0.10;
+            col = lerpColor(warmBrown, redBrown, t + totalNoise);
+        } else if (ny > 0.72) {
+            var t = (ny - 0.72) / 0.08;
+            col = lerpColor(lightBrown, warmBrown, t + totalNoise * 0.8);
+        } else if (ny > 0.66) {
+            var t = (ny - 0.66) / 0.06;
+            t = t * t * (3.0 - 2.0 * t);
+            col = lerpColor(transition, lightBrown, t + totalNoise * 0.5);
+        } else if (ny > 0.62) {
+            var t = (ny - 0.62) / 0.04;
+            t = t * t * (3.0 - 2.0 * t);
+            col = lerpColor(paleCream, transition, t + totalNoise * 0.3);
+        } else {
+            var t = ny / 0.62;
+            col = lerpColor(paleBottom, paleCream, t);
+            var powderNoise = Math.abs(noise(x, z, 10.0)) * 0.025;
+            col.r = Math.min(1, col.r + powderNoise);
+            col.g = Math.min(1, col.g + powderNoise);
+            col.b = Math.min(1, col.b + powderNoise);
+        }
+
+        colors.push(
+            Math.max(0, Math.min(1, col.r)),
+            Math.max(0, Math.min(1, col.g)),
+            Math.max(0, Math.min(1, col.b)),
+            1.0
+        );
+    }
+
+    manju.setVerticesData(BABYLON.VertexBuffer.ColorKind, colors);
+
+    // -----------------------------------------------
+    // Material setup
+    // -----------------------------------------------
+    var mat = new BABYLON.StandardMaterial("manjuMat", scene);
+    mat.diffuseColor = new BABYLON.Color3(1, 1, 1);
+    mat.specularColor = new BABYLON.Color3(0.35, 0.28, 0.15);
+    mat.specularPower = 24;
+    mat.ambientColor = new BABYLON.Color3(0.3, 0.28, 0.22);
+    manju.material = mat;
+
+    // -----------------------------------------------
+    // Scene environment setup
+    // -----------------------------------------------
+    scene.ambientColor = new BABYLON.Color3(0.25, 0.22, 0.18);
+
+    return scene;
+};
+
+                window.initFunction = async function() {
+                    
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene                    
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
