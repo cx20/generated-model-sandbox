@@ -29,11 +29,31 @@
             #canvasZone {
                 width: 100%;
                 height: 100%;
+                position: relative;
             }
+
+            #exportGlb {
+                position: absolute;
+                top: 16px;
+                right: 16px;
+                padding: 10px 18px;
+                border: 0;
+                border-radius: 8px;
+                background: #2b579a;
+                color: #fff;
+                font: 16px 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                cursor: pointer;
+            }
+
+            #exportGlb:hover { background: #3767b1; }
+            #exportGlb:disabled { background: #6b7280; cursor: default; }
         </style>
     </head>
 <body>
-    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <div id="canvasZone">
+        <canvas id="renderCanvas"></canvas>
+        <button id="exportGlb" type="button">Export GLB</button>
+    </div>
     <script>
 var canvas = document.getElementById("renderCanvas");
 
@@ -60,12 +80,26 @@ var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, 
 //  - MVP logo: placed on the back-tilted front face via computed normal
 //  - Globe: lens-shaped squashed sphere with a Winkel Tripel world map
 //  - Year rings: slotted discs that clip onto the panel's side edge
-//    (no center rod - held by the clip and stacking alone)
+//    (no center rod - held by the clip and stacking alone);
+//    milestone rings ("5/10 Years") are translucent blue glass and all
+//    ring lettering is embossed (baked highlight/shadow passes)
 // ============================================================
 
-var createScene = function () {
+var createScene = async function () {
     var scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(0.92, 0.91, 0.89, 1.0);
+
+    // CSG2 (used below to carve the sail out of the panel) is backed by the
+    // Manifold WASM library, which Babylon fetches from a CDN on demand.
+    // If that fetch fails the scene still builds - the panel just keeps its
+    // full box shape and overlaps the sail as before.
+    var csgReady = false;
+    try {
+        await BABYLON.InitializeCSG2Async();
+        csgReady = true;
+    } catch (e) {
+        console.warn("CSG2 unavailable, skipping the panel/sail boolean:", e);
+    }
 
     // ---------- Camera, lights, environment ----------
     var camera = new BABYLON.ArcRotateCamera("camera",
@@ -124,20 +158,27 @@ var createScene = function () {
     var W = 1.32;           // half width (widened by 1.2x)
     var TP = 0.28;          // clear panel thickness
     var PANEL_H = 5.6;      // panel height
-    var SAIL_L = -W;        // left end of the sail base (full monolith width)
+    var SAIL_L = -0.68;     // left end of the sail base (narrowed so the
+                            // fully-inserted ring stack clears the sail)
 
     // --- Clear panel (a plain, monolith-like rectangular slab) ---
     var panel = BABYLON.MeshBuilder.CreateBox("panel",
         { width: 2 * W, height: PANEL_H, depth: TP }, scene);
     panel.position.y = PANEL_H / 2 + 0.02;
+    // Bake the height offset into the vertices so the panel's local transform
+    // is identity, matching blueSail (whose vertices are already in trophy
+    // space). The CSG2 boolean below can then run in trophy-local space and
+    // its result can stay parented to the trophy node.
+    panel.bakeCurrentTransformIntoVertices();
     panel.material = clearGlass;
     panel.parent = trophy;
     panel.alphaIndex = 1;
 
     // --- Blue sail (wedge: deep base -> top edge of thickness TP) ---
     // On the real trophy the top is not a sharp point but an edge with
-    // the same thickness as the panel. The base spans the full monolith
-    // width and the hypotenuse runs from the bottom-left corner to the top.
+    // the same thickness as the panel. The base starts right of the panel's
+    // left edge (SAIL_L) so the ring stack, pushed fully onto the panel,
+    // does not collide with the sail.
     var ZF = -0.84;     // front edge of the base (depth reduced to 0.8x)
     var ZB = 0.4;       // back edge of the base (behind the panel's back face)
     var BASE_Y = 0;     // the sail sits directly on the ground
@@ -167,13 +208,46 @@ var createScene = function () {
     vd.positions = positions;
     vd.indices = indices;
     vd.normals = normals;
+    // CSG2.subtract requires both operands to carry the same vertex
+    // properties, and the panel box comes with UVs. The sail is untextured,
+    // so a zero-filled UV set is enough to match (2 floats x 6 vertices).
+    vd.uvs = new Array(12).fill(0);
 
     var blueSail = new BABYLON.Mesh("blueSail", scene);
     vd.applyToMesh(blueSail);
-    blueSail.convertToFlatShadedMesh();   // crisp facet edges
     blueSail.material = blueGlass;
     blueSail.parent = trophy;
     blueSail.alphaIndex = 1;
+
+    // --- Carve the sail volume out of the clear panel (CSG2) ---
+    // The panel and the sail interpenetrate: two transparent glass surfaces
+    // crossing inside each other read as a muddy double-shaded overlap.
+    // Subtracting the sail leaves a clean seam where they meet, so each
+    // volume is drawn exactly once.
+    // Both operands are in trophy-local space (see bakeCurrentTransformIntoVertices
+    // above), hence ignoreWorldMatrix = true; the result is parented to trophy.
+    // This runs while blueSail is still a shared-vertex indexed mesh - the
+    // flat-shading conversion splits vertices, which would break manifoldness.
+    if (csgReady) {
+        var panelCSG = BABYLON.CSG2.FromMesh(panel, true);
+        var sailCSG = BABYLON.CSG2.FromMesh(blueSail, true);
+        var diff = panelCSG.subtract(sailCSG);
+        // centerMesh defaults to true, which re-centers the result's vertices
+        // on the origin without compensating mesh.position - that would drop
+        // the panel by half its height. Keep the original coordinates.
+        var carved = diff.toMesh("panel", scene, { centerMesh: false });
+        diff.dispose();
+        panelCSG.dispose();
+        sailCSG.dispose();
+        panel.dispose();
+
+        panel = carved;
+        panel.material = clearGlass;
+        panel.parent = trophy;
+        panel.alphaIndex = 1;
+    }
+
+    blueSail.convertToFlatShadedMesh();   // crisp facet edges
 
     // --- MVP logo (aligned to the back-tilted front face) ---
     var logoDT = new BABYLON.DynamicTexture("logoDT",
@@ -234,7 +308,7 @@ var createScene = function () {
     // (The face's horizontal direction is the X axis itself, so an X offset
     // keeps the plane on the face.)
     var logoY = 1.0;
-    var logoXOffset = 0.24;
+    var logoXOffset = 0.12;   // re-tuned after narrowing the sail base
     var baseMid = new BABYLON.Vector3((SAIL_L + W) / 2, BASE_Y, ZF);
     var tLogo = (logoY - BASE_Y) / (topFront.y - BASE_Y);
     var logoCenter = baseMid.add(topFront.subtract(baseMid).scale(tLogo))
@@ -284,7 +358,7 @@ var createScene = function () {
 
     var insPlane = BABYLON.MeshBuilder.CreatePlane("insPlane",
         { width: 1.9, height: 0.95 }, scene);
-    insPlane.position.set(-0.05, 3.45, -TP / 2 - 0.01);
+    insPlane.position.set(0.22, 3.45, -TP / 2 - 0.01);   // shifted right
     insPlane.material = insMat;
     insPlane.parent = trophy;
     insPlane.alphaIndex = 2;
@@ -404,7 +478,7 @@ var createScene = function () {
     globeMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
 
     var globe = BABYLON.MeshBuilder.CreateSphere("globe",
-        { diameter: 1.45, segments: 48, updatable: true }, scene);
+        { diameter: 1.16, segments: 48, updatable: true }, scene);   // 0.8x of 1.45
     globe.scaling.z = 0.34;   // bulges slightly beyond the 0.28 panel thickness
     globe.position.set(0, 4.55, 0);
     globe.material = globeMat;
@@ -416,7 +490,7 @@ var createScene = function () {
     // flat map is etched onto the lens).
     var gp = globe.getVerticesData(BABYLON.VertexBuffer.PositionKind);
     var guv = globe.getVerticesData(BABYLON.VertexBuffer.UVKind);
-    var gd = 1.45;   // sphere diameter
+    var gd = 1.16;   // sphere diameter
     for (var vi = 0; vi < gp.length / 3; vi++) {
         guv[vi * 2]     = gp[vi * 3]     / gd + 0.5;
         guv[vi * 2 + 1] = gp[vi * 3 + 1] / gd + 0.5;
@@ -428,7 +502,7 @@ var createScene = function () {
     // glass PBR material whose refraction bends the surrounding environment,
     // like looking through a real glass lens. Refraction samples
     // scene.environmentTexture (the .env), so there is no extra render pass.
-    // It sits just INSIDE the map shell (diameter 1.43 < 1.45), so the etched
+    // It sits just INSIDE the map shell (diameter 1.14 < 1.16), so the etched
     // continents stay on top and the glass shows through the transparent gaps.
     var lensMat = new BABYLON.PBRMaterial("lensMat", scene);
     lensMat.albedoColor = new BABYLON.Color3(1, 1, 1);
@@ -446,7 +520,7 @@ var createScene = function () {
     lensMat.backFaceCulling = false;
 
     var lens = BABYLON.MeshBuilder.CreateSphere("lens",
-        { diameter: 1.43, segments: 48 }, scene);
+        { diameter: 1.14, segments: 48 }, scene);
     lens.scaling.z = 0.34;
     lens.position.copyFrom(globe.position);
     lens.material = lensMat;
@@ -459,10 +533,10 @@ var createScene = function () {
     //   - the label is a separate ribbon (band) hugging the outer rim,
     //     skipping the notch
     var stack = new BABYLON.TransformNode("stack", scene);
-    // Position so the panel's left edge (world x = trophy.x - W = -0.52)
-    // lands inside the notch: 0.30 from the ring center, between the
-    // notch end (0.0) and the radius (0.525).
-    stack.position.set(-0.82, GROUND_LIFT, 0);   // same lift as trophy (avoid ground Z-fight)
+    // Fully inserted: the panel's left edge (world x = trophy.x - W = -0.52)
+    // reaches ring-local x = +0.04, just touching the felt end pad at the
+    // notch's inner end (SLOT_END..0.02), like the real trophy.
+    stack.position.set(-0.56, GROUND_LIFT, 0);   // same lift as trophy (avoid ground Z-fight)
 
     var RING_R = 0.525;    // radius (reduced to 0.7x)
     var SLIT_W = 0.34;     // notch width (slightly wider than the 0.28 panel)
@@ -479,12 +553,19 @@ var createScene = function () {
     frostMat.backFaceCulling = false;
     frostMat.twoSidedLighting = true;
 
+    // Milestone rings ("5 Years" / "10 Years"): translucent cobalt-blue
+    // glass, like the real ring. The felt notch and a ghost of the
+    // far-side band show through, matching the photos; alpha 0.8 (same
+    // as the sail) keeps the front label legible.
     var mileMat = new BABYLON.PBRMaterial("mileMat", scene);
-    mileMat.albedoColor = new BABYLON.Color3(0.05, 0.18, 0.6);
+    mileMat.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
     mileMat.metallic = 0;
-    mileMat.roughness = 0.3;
+    mileMat.roughness = 0.05;
+    mileMat.alpha = 0.8;
     mileMat.backFaceCulling = false;
     mileMat.twoSidedLighting = true;
+    mileMat.separateCullingPass = true;
+    mileMat.environmentIntensity = 1.1;
 
     // Felt lining inside the notch
     var feltMat = new BABYLON.StandardMaterial("feltMat", scene);
@@ -524,6 +605,9 @@ var createScene = function () {
         var body = BABYLON.MeshBuilder.ExtrudePolygon("ringBody_" + label,
             { shape: cProfile, depth: ringH }, scene, earcut);
         body.material = milestone ? mileMat : frostMat;
+        if (milestone) {
+            body.alphaIndex = 2;   // glass body draws before its band (3)
+        }
         body.parent = stack;
 
         // Felt lining inside the notch (both walls + inner end pad)
@@ -552,9 +636,8 @@ var createScene = function () {
         // Transparent pixels are "black + alpha 0", so interpolation bleeds
         // black into glyph edges and makes strokes look thicker. Nudge the
         // RGB of transparent pixels toward the text color (1% alpha is invisible).
-        c.fillStyle = milestone ? "rgba(255,255,255,0.01)" : "rgba(74,74,74,0.01)";
+        c.fillStyle = milestone ? "rgba(205,211,219,0.01)" : "rgba(58,65,80,0.01)";
         c.fillRect(0, 0, 2048, 128);
-        c.fillStyle = milestone ? "#ffffff" : "#4a4a4a";
         // Light weight (300) to match the thin print on the real rings.
         // Resolves to Segoe UI Light (Windows) / Helvetica Neue Light (Mac),
         // falling back to regular-weight Arial when unavailable.
@@ -584,7 +667,33 @@ var createScene = function () {
         c.save();
         c.translate(cx, 66);
         c.scale(s, 1);
-        c.fillText(label, 0, 0);
+        // Embossed lettering, baked into the texture as a 3-pass draw
+        // (lit-from-above convention). Offsets are y-only because the
+        // horizontal scale s would distort any x offset:
+        //  - milestone: RAISED silver (highlight above, shadow below,
+        //    metallic gradient face), like the real "5 Years" ring
+        //  - frosted:   ENGRAVED navy (shadow above, highlight below),
+        //    like the etched year rings
+        if (milestone) {
+            c.fillStyle = "rgba(0, 8, 45, 0.6)";
+            c.fillText(label, 0, 2.5);
+            c.fillStyle = "rgba(255, 255, 255, 0.95)";
+            c.fillText(label, 0, -2.5);
+            var mg = c.createLinearGradient(0, -46, 0, 46);
+            mg.addColorStop(0.0,  "#f5f7fa");
+            mg.addColorStop(0.45, "#cdd3db");
+            mg.addColorStop(0.55, "#aab1bc");
+            mg.addColorStop(1.0,  "#868e9a");
+            c.fillStyle = mg;
+            c.fillText(label, 0, 0);
+        } else {
+            c.fillStyle = "rgba(20, 24, 34, 0.4)";
+            c.fillText(label, 0, -1.5);
+            c.fillStyle = "rgba(255, 255, 255, 0.85)";
+            c.fillText(label, 0, 1.5);
+            c.fillStyle = "#3a4150";
+            c.fillText(label, 0, 0);
+        }
         c.restore();
         dt.update();
 
@@ -605,8 +714,8 @@ var createScene = function () {
         // upright. If it ever appears upside down, swap the two paths.
         var pathBottom = [], pathTop = [];
         var N = 96, RB = RING_R + 0.008;
-        for (var s = 0; s <= N; s++) {
-            var t = slitHalfAngle + (2 * Math.PI - 2 * slitHalfAngle) * (s / N);
+        for (var s2 = 0; s2 <= N; s2++) {
+            var t = slitHalfAngle + (2 * Math.PI - 2 * slitHalfAngle) * (s2 / N);
             var x = RB * Math.cos(t), z = RB * Math.sin(t);
             pathBottom.push(new BABYLON.Vector3(x, -ringH + 0.02, z));
             pathTop.push(new BABYLON.Vector3(x, -0.02, z));
@@ -708,7 +817,8 @@ window.initFunction = async function() {
   }
   if (!engine) throw 'engine should not be null.';
   startRenderLoop(engine, canvas);
-  window.scene = createScene();
+  // createScene is async: it awaits the CSG2/Manifold initialization.
+  window.scene = await createScene();
 };
 initFunction().then(() => {
   sceneToRender = scene;
@@ -717,6 +827,31 @@ initFunction().then(() => {
 // Resize
 window.addEventListener("resize", function () {
   engine.resize();
+});
+
+// ---------- Export GLB ----------
+// Serializes the live scene to models/gltf/Trophy/glTF-Binary/Trophy.glb.
+// The desk is scenery, not part of the trophy, so it is excluded - this
+// matches the mesh set in the committed export.
+document.getElementById("exportGlb").addEventListener("click", function () {
+  var btn = this;
+  if (!scene) return;
+  btn.disabled = true;
+  btn.textContent = "Exporting...";
+
+  BABYLON.GLTF2Export.GLBAsync(scene, "Trophy", {
+    shouldExportNode: function (node) {
+      return node.name !== "ground";
+    }
+  }).then(function (glb) {
+    glb.downloadFiles();
+    btn.disabled = false;
+    btn.textContent = "Export GLB";
+  }).catch(function (e) {
+    console.error("GLB export failed:", e);
+    btn.disabled = false;
+    btn.textContent = "Export failed - retry";
+  });
 });
 
     </script>
