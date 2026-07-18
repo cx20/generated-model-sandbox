@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <!-- glTF export (GLB) serializer -->
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+            
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+<body>
+    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+    <script>
+var canvas = document.getElementById("renderCanvas");
+
+var startRenderLoop = function (engine, canvas) {
+  engine.runRenderLoop(function () {
+    if (sceneToRender && sceneToRender.activeCamera) {
+      sceneToRender.render();
+    }
+  });
+}
+
+var engine = null;
+var scene = null;
+var sceneToRender = null;
+var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, disableWebGL2Support: false }); };
+// ============================================================
+// Microsoft MVP Trophy recreation for the Babylon.js Playground
+// Paste into https://playground.babylonjs.com/ (JS mode) and run.
+// Note: earcut (required by ExtrudePolygon) is preloaded in the Playground.
+//
+// Structure:
+//  - Clear panel: a plain monolith-like rectangular slab
+//  - Blue sail: a wedge from a deep base to a top edge of panel thickness
+//  - MVP logo: placed on the back-tilted front face via computed normal
+//  - Globe: lens-shaped squashed sphere with a Winkel Tripel world map
+//  - Year rings: slotted discs that clip onto the panel's side edge
+//    (no center rod - held by the clip and stacking alone)
+// ============================================================
+
+var createScene = function () {
+    var scene = new BABYLON.Scene(engine);
+    scene.clearColor = new BABYLON.Color4(0.92, 0.91, 0.89, 1.0);
+
+    // ---------- Camera, lights, environment ----------
+    var camera = new BABYLON.ArcRotateCamera("camera",
+        -Math.PI / 2 + 0.3, Math.PI / 2.3, 12,
+        new BABYLON.Vector3(-0.2, 2.6, 0), scene);
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 4;
+    camera.upperRadiusLimit = 40;
+    camera.wheelPrecision = 20;
+    camera.useAutoRotationBehavior = true;
+    camera.autoRotationBehavior.idleRotationSpeed = 0.12;
+
+    scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
+        "textures/environment.env", scene);
+    scene.environmentIntensity = 1.0;
+
+    var dirLight = new BABYLON.DirectionalLight("dir",
+        new BABYLON.Vector3(-0.4, -1, 0.6), scene);
+    dirLight.position = new BABYLON.Vector3(5, 12, -9);
+    dirLight.intensity = 1.3;
+
+    var hemi = new BABYLON.HemisphericLight("hemi",
+        new BABYLON.Vector3(0, 1, 0), scene);
+    hemi.intensity = 0.35;
+
+    // ---------- Materials ----------
+    var clearGlass = new BABYLON.PBRMaterial("clearGlass", scene);
+    clearGlass.albedoColor = new BABYLON.Color3(0.9, 0.93, 0.95);
+    clearGlass.metallic = 0;
+    clearGlass.roughness = 0.03;
+    clearGlass.alpha = 0.15;
+    clearGlass.backFaceCulling = false;
+    clearGlass.twoSidedLighting = true;
+    clearGlass.separateCullingPass = true;
+    clearGlass.environmentIntensity = 1.2;
+
+    var blueGlass = new BABYLON.PBRMaterial("blueGlass", scene);
+    blueGlass.albedoColor = new BABYLON.Color3(0.03, 0.16, 0.6);
+    blueGlass.metallic = 0;
+    blueGlass.roughness = 0.06;
+    blueGlass.alpha = 0.8;
+    blueGlass.backFaceCulling = false;
+    blueGlass.twoSidedLighting = true;
+    blueGlass.separateCullingPass = true;
+
+    // ---------- Trophy body ----------
+    // Lift the whole trophy a hair off the ground. The sail bottom (BASE_Y=0)
+    // and the base puck bottom (y=0) would otherwise be coplanar with the
+    // ground plane (y=0) and Z-fight. Ground/mirror stay at y=0.
+    var GROUND_LIFT = 0.01;
+    var trophy = new BABYLON.TransformNode("trophy", scene);
+    trophy.position.x = 0.8;
+    trophy.position.y = GROUND_LIFT;
+
+    // Dimension parameters
+    var W = 1.32;           // half width (widened by 1.2x)
+    var TP = 0.28;          // clear panel thickness
+    var PANEL_H = 5.6;      // panel height
+    var SAIL_L = -W;        // left end of the sail base (full monolith width)
+
+    // --- Clear panel (a plain, monolith-like rectangular slab) ---
+    var panel = BABYLON.MeshBuilder.CreateBox("panel",
+        { width: 2 * W, height: PANEL_H, depth: TP }, scene);
+    panel.position.y = PANEL_H / 2 + 0.02;
+    panel.material = clearGlass;
+    panel.parent = trophy;
+    panel.alphaIndex = 1;
+
+    // --- Blue sail (wedge: deep base -> top edge of thickness TP) ---
+    // On the real trophy the top is not a sharp point but an edge with
+    // the same thickness as the panel. The base spans the full monolith
+    // width and the hypotenuse runs from the bottom-left corner to the top.
+    var ZF = -0.84;     // front edge of the base (depth reduced to 0.8x)
+    var ZB = 0.4;       // back edge of the base (behind the panel's back face)
+    var BASE_Y = 0;     // the sail sits directly on the ground
+    // Top edge sits at x = W so the sail's right side is vertical and flush
+    // with the panel's right face (base-right is already at x = W).
+    var TOP = new BABYLON.Vector3(W, 4.35, 0);
+    var topFront = new BABYLON.Vector3(TOP.x, TOP.y, -TP / 2);
+
+    var positions = [
+        SAIL_L, BASE_Y, ZF,        // 0: base front-left
+         W,     BASE_Y, ZF,        // 1: base front-right
+         W,     BASE_Y, ZB,        // 2: base back-right
+        SAIL_L, BASE_Y, ZB,        // 3: base back-left
+        TOP.x,  TOP.y, -TP / 2,    // 4: top edge, front
+        TOP.x,  TOP.y,  TP / 2     // 5: top edge, back
+    ];
+    var indices = [
+        0, 1, 4,            // front face (back-tilted triangle, carries the logo)
+        1, 2, 5,  1, 5, 4,  // right face
+        2, 3, 5,            // back face
+        3, 0, 4,  3, 4, 5,  // left face (the hypotenuse face seen from the front)
+        0, 2, 1,  0, 3, 2   // bottom face
+    ];
+    var normals = [];
+    BABYLON.VertexData.ComputeNormals(positions, indices, normals);
+    var vd = new BABYLON.VertexData();
+    vd.positions = positions;
+    vd.indices = indices;
+    vd.normals = normals;
+
+    var blueSail = new BABYLON.Mesh("blueSail", scene);
+    vd.applyToMesh(blueSail);
+    blueSail.convertToFlatShadedMesh();   // crisp facet edges
+    blueSail.material = blueGlass;
+    blueSail.parent = trophy;
+    blueSail.alphaIndex = 1;
+
+    // --- MVP logo (aligned to the back-tilted front face) ---
+    var logoDT = new BABYLON.DynamicTexture("logoDT",
+        { width: 512, height: 512 }, scene, true);
+    logoDT.hasAlpha = true;
+    var lc = logoDT.getContext();
+    lc.clearRect(0, 0, 512, 512);
+
+    lc.save();
+    lc.translate(256, 160);
+    lc.rotate(Math.PI / 4);
+    var grad = lc.createLinearGradient(-110, -110, 110, 110);
+    grad.addColorStop(0.0, "#f8f8f8");
+    grad.addColorStop(0.5, "#c8ccd4");
+    grad.addColorStop(1.0, "#989ea8");
+    lc.fillStyle = grad;
+    lc.fillRect(-100, -100, 200, 200);
+    lc.restore();
+
+    lc.textAlign = "center";
+    lc.textBaseline = "middle";
+    lc.fillStyle = "#12388f";
+    lc.font = "bold 100px Arial";
+    lc.fillText("MVP", 256, 160);
+    lc.fillStyle = "#ffffff";
+    lc.font = "bold 46px Arial";
+    lc.fillText("Microsoft\u00AE", 256, 350);
+    lc.font = "38px Arial";
+    lc.fillText("Most Valuable", 256, 405);
+    lc.fillText("Professional", 256, 450);
+    logoDT.update();
+
+    var logoMat = new BABYLON.StandardMaterial("logoMat", scene);
+    // Put the text/alpha on the diffuse (base color) channel so it survives
+    // a glTF export: glTF has no separate opacity texture, and its emissive
+    // texture carries no alpha. diffuse + useAlphaFromDiffuseTexture maps to
+    // baseColorTexture (RGBA), and disableLighting -> KHR_materials_unlit.
+    logoMat.diffuseTexture = logoDT;
+    logoMat.useAlphaFromDiffuseTexture = true;
+    logoMat.emissiveTexture = logoDT;
+    logoMat.disableLighting = true;
+    logoMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    logoMat.backFaceCulling = false;
+
+    // Compute the front face normal and align the plane to that face.
+    // (The front face is the triangle spanned by the base edge p0-p1
+    // and the front vertex of the top edge, topFront.)
+    var p0 = new BABYLON.Vector3(SAIL_L, BASE_Y, ZF);
+    var p1 = new BABYLON.Vector3( W,     BASE_Y, ZF);
+    var frontN = BABYLON.Vector3.Cross(
+        p1.subtract(p0), topFront.subtract(p0)).normalize();
+    if (frontN.z > 0) {
+        frontN = frontN.negate();   // make it face front (-Z)
+    }
+
+    // Anchor on the line from the base midpoint to topFront at height logoY,
+    // then shift right by logoXOffset to match the real trophy photos.
+    // (The face's horizontal direction is the X axis itself, so an X offset
+    // keeps the plane on the face.)
+    var logoY = 1.0;
+    var logoXOffset = 0.24;
+    var baseMid = new BABYLON.Vector3((SAIL_L + W) / 2, BASE_Y, ZF);
+    var tLogo = (logoY - BASE_Y) / (topFront.y - BASE_Y);
+    var logoCenter = baseMid.add(topFront.subtract(baseMid).scale(tLogo))
+                            .add(frontN.scale(0.02));
+    logoCenter.x += logoXOffset;
+
+    var logoPlane = BABYLON.MeshBuilder.CreatePlane("logoPlane",
+        { size: 1.55 }, scene);
+    logoPlane.position.copyFrom(logoCenter);
+    var q = new BABYLON.Quaternion();
+    BABYLON.Quaternion.FromUnitVectorsToRef(
+        new BABYLON.Vector3(0, 0, -1), frontN, q);
+    logoPlane.rotationQuaternion = q;
+    logoPlane.material = logoMat;
+    logoPlane.parent = trophy;
+    logoPlane.alphaIndex = 2;
+
+    // --- Etched inscription on the clear panel ---
+    var insDT = new BABYLON.DynamicTexture("insDT",
+        { width: 512, height: 256 }, scene, true);
+    insDT.hasAlpha = true;
+    var ic = insDT.getContext();
+    ic.clearRect(0, 0, 512, 256);
+    ic.fillStyle = "rgba(255,255,255,0.85)";
+    ic.font = "italic 30px Georgia";
+    ic.textAlign = "left";
+    var lines = [
+        "We recognize and value your",
+        "exceptional contributions",
+        "to technical communities",
+        "worldwide."
+    ];
+    for (var i = 0; i < lines.length; i++) {
+        ic.fillText(lines[i], 30, 60 + i * 46);
+    }
+    insDT.update();
+
+    var insMat = new BABYLON.StandardMaterial("insMat", scene);
+    // See logoMat: diffuse+alpha channel so the text exports to glTF.
+    insMat.diffuseTexture = insDT;
+    insMat.useAlphaFromDiffuseTexture = true;
+    insMat.emissiveTexture = insDT;
+    insMat.disableLighting = true;
+    insMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+    insMat.alpha = 0.5;   // faint, engraving-like
+    insMat.backFaceCulling = false;
+
+    var insPlane = BABYLON.MeshBuilder.CreatePlane("insPlane",
+        { width: 1.9, height: 0.95 }, scene);
+    insPlane.position.set(-0.05, 3.45, -TP / 2 - 0.01);
+    insPlane.material = insMat;
+    insPlane.parent = trophy;
+    insPlane.alphaIndex = 2;
+
+    // --- Globe (lens-shaped squashed sphere + Winkel Tripel world map) ---
+    // Read the pixels of worldHeightMap.jpg (equirectangular) and splat
+    // them through the forward Winkel Tripel projection
+    // (standard parallel arccos(2/pi) ~= 50.5 deg,
+    //  central meridian 10 deg East = Europe-centered).
+    var GD = 1024;   // side length of the map texture
+    var globeDT = new BABYLON.DynamicTexture("globeDT",
+        { width: GD, height: GD }, scene, true);
+    globeDT.hasAlpha = true;
+    var gctx = globeDT.getContext();
+    gctx.clearRect(0, 0, GD, GD);          // transparent background
+    // Nudge the RGB of transparent pixels toward the continent color
+    // (prevents dark edge fringing; 1% alpha is invisible).
+    gctx.fillStyle = "rgba(143,149,156,0.01)";
+    gctx.fillRect(0, 0, GD, GD);
+    globeDT.update();
+
+    var mapImg = new Image();
+    mapImg.crossOrigin = "anonymous";
+    mapImg.onload = function () {
+        try {
+            var SW = 1024, SH = 512;
+            var off = document.createElement("canvas");
+            off.width = SW;
+            off.height = SH;
+            var octx = off.getContext("2d");
+            octx.drawImage(mapImg, 0, 0, SW, SH);
+            var src = octx.getImageData(0, 0, SW, SH).data;
+
+            var phi1 = Math.acos(2 / Math.PI);   // standard parallel
+            var lon0 = 10 * Math.PI / 180;       // central meridian (10 deg E)
+            var XMAX = 2.5754;                   // max projected x coordinate
+            var mapScale = (GD * 0.49) / XMAX;
+
+            // Sea-level pixels are not necessarily 0 (JPEG adds a floor).
+            // The sea dominates the image as a uniform region, so treat the
+            // histogram mode as the sea level and threshold slightly above it.
+            var hist = new Array(256).fill(0);
+            for (var hi = 0; hi < SW * SH; hi++) {
+                hist[src[hi * 4]]++;
+            }
+            var mode = 0;
+            for (var hv = 1; hv < 256; hv++) {
+                if (hist[hv] > hist[mode]) mode = hv;
+            }
+            var TH = mode + 2;   // sea level + minimal margin (keep lowlands)
+
+            // The tight margin lets noise through; clean it up on the mask:
+            //   1) build a land mask from the threshold
+            //   2) land with < 3 of 8 neighbors -> sea (remove speckle noise)
+            //      sea with >= 6 of 8 neighbors -> land (fill pinholes)
+            var mask = new Uint8Array(SW * SH);
+            for (var mi = 0; mi < SW * SH; mi++) {
+                mask[mi] = src[mi * 4] >= TH ? 1 : 0;
+            }
+            function neighbors8(m, x, y) {
+                var n = 0;
+                for (var dy = -1; dy <= 1; dy++) {
+                    for (var dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        var xx = x + dx, yy = y + dy;
+                        if (xx < 0 || xx >= SW || yy < 0 || yy >= SH) continue;
+                        n += m[yy * SW + xx];
+                    }
+                }
+                return n;
+            }
+            var mask2 = new Uint8Array(SW * SH);
+            for (var my = 0; my < SH; my++) {
+                for (var mx = 0; mx < SW; mx++) {
+                    var n8 = neighbors8(mask, mx, my);
+                    var mIdx = my * SW + mx;
+                    mask2[mIdx] = mask[mIdx] ? (n8 >= 3 ? 1 : 0)
+                                             : (n8 >= 6 ? 1 : 0);
+                }
+            }
+
+            gctx.fillStyle = "#8f959c";          // continents (gray)
+            for (var sy = 0; sy < SH; sy++) {
+                var lat = Math.PI / 2 - ((sy + 0.5) / SH) * Math.PI;
+                if (lat < -60 * Math.PI / 180) continue;   // skip Antarctica
+                for (var sx = 0; sx < SW; sx++) {
+                    if (!mask2[sy * SW + sx]) continue;
+                    var lon = ((sx + 0.5) / SW) * 2 * Math.PI - Math.PI - lon0;
+                    if (lon < -Math.PI) lon += 2 * Math.PI;
+                    if (lon >  Math.PI) lon -= 2 * Math.PI;
+                    // Forward Winkel Tripel projection
+                    var a = Math.acos(Math.cos(lat) * Math.cos(lon / 2));
+                    var sinca = (a < 1e-9) ? 1 : Math.sin(a) / a;
+                    var X = 0.5 * (lon * Math.cos(phi1) +
+                        2 * Math.cos(lat) * Math.sin(lon / 2) / sinca);
+                    var Y = 0.5 * (lat + Math.sin(lat) / sinca);
+                    gctx.fillRect(GD / 2 + X * mapScale - 1,
+                                  GD / 2 - Y * mapScale - 1, 2, 2);
+                }
+            }
+        } catch (e) {
+            // Fallback: draw the raw image if pixels cannot be read
+            gctx.drawImage(mapImg, 0, GD / 4, GD, GD / 2);
+        }
+        globeDT.update();
+    };
+    mapImg.src = "textures/worldHeightMap.jpg";
+
+    // Show only the continents; everything else stays transparent
+    // (only the etched lines appear to float, like the real trophy).
+    var globeMat = new BABYLON.StandardMaterial("globeMat", scene);
+    // See logoMat: diffuse+alpha channel so the map exports to glTF.
+    globeMat.diffuseTexture = globeDT;
+    globeMat.useAlphaFromDiffuseTexture = true;
+    globeMat.emissiveTexture = globeDT;
+    globeMat.disableLighting = true;
+    globeMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+
+    var globe = BABYLON.MeshBuilder.CreateSphere("globe",
+        { diameter: 1.45, segments: 48, updatable: true }, scene);
+    globe.scaling.z = 0.34;   // bulges slightly beyond the 0.28 panel thickness
+    globe.position.set(0, 4.55, 0);
+    globe.material = globeMat;
+    globe.parent = trophy;
+    globe.alphaIndex = 2;   // draw after the glass panel
+
+    // Spherical wrapping would distort a flat map, so re-map the UVs to a
+    // planar projection from the front (matches the real trophy, where a
+    // flat map is etched onto the lens).
+    var gp = globe.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+    var guv = globe.getVerticesData(BABYLON.VertexBuffer.UVKind);
+    var gd = 1.45;   // sphere diameter
+    for (var vi = 0; vi < gp.length / 3; vi++) {
+        guv[vi * 2]     = gp[vi * 3]     / gd + 0.5;
+        guv[vi * 2 + 1] = gp[vi * 3 + 1] / gd + 0.5;
+    }
+    globe.updateVerticesData(BABYLON.VertexBuffer.UVKind, guv);
+
+    // --- Glass lens body (convex lens with PBR refraction) ---
+    // The squashed sphere already has a convex-lens profile. Give it a clear
+    // glass PBR material whose refraction bends the surrounding environment,
+    // like looking through a real glass lens. Refraction samples
+    // scene.environmentTexture (the .env), so there is no extra render pass.
+    // It sits just INSIDE the map shell (diameter 1.43 < 1.45), so the etched
+    // continents stay on top and the glass shows through the transparent gaps.
+    var lensMat = new BABYLON.PBRMaterial("lensMat", scene);
+    lensMat.albedoColor = new BABYLON.Color3(1, 1, 1);
+    lensMat.metallic = 0.0;
+    lensMat.roughness = 0.02;                 // polished glass -> sharp highlights
+    lensMat.environmentIntensity = 1.3;
+    lensMat.subSurface.isRefractionEnabled = true;
+    lensMat.subSurface.indexOfRefraction = 1.52;   // crown glass (~1.5); raise to bend more
+    lensMat.subSurface.refractionIntensity = 1.0;
+    lensMat.subSurface.tintColor = new BABYLON.Color3(0.9, 0.95, 1.0);  // faint cool glass tint
+    // Chromatic dispersion adds a subtle rainbow fringe at the lens edges,
+    // like real optical glass. Ignored on Babylon versions without it.
+    lensMat.subSurface.isDispersionEnabled = true;
+    lensMat.subSurface.dispersion = 1.2;
+    lensMat.backFaceCulling = false;
+
+    var lens = BABYLON.MeshBuilder.CreateSphere("lens",
+        { diameter: 1.43, segments: 48 }, scene);
+    lens.scaling.z = 0.34;
+    lens.position.copyFrom(globe.position);
+    lens.material = lensMat;
+    lens.parent = trophy;
+
+    // ---------- Year ring stack ----------
+    // Each ring is "a solid disc with one rectangular notch cut from the
+    // rim almost to the center":
+    //   - the body is an ExtrudePolygon of the slotted-disc profile
+    //   - the label is a separate ribbon (band) hugging the outer rim,
+    //     skipping the notch
+    var stack = new BABYLON.TransformNode("stack", scene);
+    // Position so the panel's left edge (world x = trophy.x - W = -0.52)
+    // lands inside the notch: 0.30 from the ring center, between the
+    // notch end (0.0) and the radius (0.525).
+    stack.position.set(-0.82, GROUND_LIFT, 0);   // same lift as trophy (avoid ground Z-fight)
+
+    var RING_R = 0.525;    // radius (reduced to 0.7x)
+    var SLIT_W = 0.34;     // notch width (slightly wider than the 0.28 panel)
+    var SLOT_END = 0.0;    // x coordinate of the notch's inner end (near center)
+    var ringH  = 0.34;     // ring thickness (height)
+
+    // Frosted-glass ring body material.
+    // Kept opaque: if translucent, the far-side label band shows through
+    // and the text overlaps illegibly.
+    var frostMat = new BABYLON.PBRMaterial("frostMat", scene);
+    frostMat.albedoColor = new BABYLON.Color3(0.93, 0.93, 0.91);
+    frostMat.metallic = 0;
+    frostMat.roughness = 0.55;
+    frostMat.backFaceCulling = false;
+    frostMat.twoSidedLighting = true;
+
+    var mileMat = new BABYLON.PBRMaterial("mileMat", scene);
+    mileMat.albedoColor = new BABYLON.Color3(0.05, 0.18, 0.6);
+    mileMat.metallic = 0;
+    mileMat.roughness = 0.3;
+    mileMat.backFaceCulling = false;
+    mileMat.twoSidedLighting = true;
+
+    // Felt lining inside the notch
+    var feltMat = new BABYLON.StandardMaterial("feltMat", scene);
+    feltMat.diffuseColor = new BABYLON.Color3(0.55, 0.52, 0.47);
+    feltMat.specularColor = new BABYLON.Color3(0, 0, 0);
+
+    // Profile of a solid disc with one rectangular notch cut from the rim
+    // almost to the center (notch along +X, with parallel straight walls).
+    function buildSlotDiscProfile(R, w, xEnd) {
+        var a1 = Math.asin((w / 2) / R);   // half angle of the notch at the rim
+        var pts = [];
+        var N = 96;
+        for (var i = 0; i <= N; i++) {
+            var t = a1 + (2 * Math.PI - 2 * a1) * (i / N);
+            pts.push(new BABYLON.Vector3(R * Math.cos(t), 0, R * Math.sin(t)));
+        }
+        // Into the notch: lower wall -> inner end -> upper wall
+        // (the polygon closes back to the first point)
+        pts.push(new BABYLON.Vector3(xEnd, 0, -w / 2));
+        pts.push(new BABYLON.Vector3(xEnd, 0,  w / 2));
+        return pts;
+    }
+    var cProfile = buildSlotDiscProfile(RING_R, SLIT_W, SLOT_END);
+    var slitHalfAngle = Math.asin((SLIT_W / 2) / RING_R);
+    var slotOuterX = RING_R * Math.cos(slitHalfAngle);   // where the notch meets the rim
+
+    // Clear base puck (also gets a notch to receive the panel)
+    var puckProfile = buildSlotDiscProfile(0.63, SLIT_W, 0.0);
+    var baseDisc = BABYLON.MeshBuilder.ExtrudePolygon("baseDisc",
+        { shape: puckProfile, depth: 0.28 }, scene, earcut);
+    baseDisc.position.y = 0.28;    // extrusion goes -Y, so position by the top face
+    baseDisc.material = clearGlass;
+    baseDisc.parent = stack;
+
+    function createRing(label, milestone) {
+        // Body: the XZ-plane profile is extruded along -Y (no rotation needed)
+        var body = BABYLON.MeshBuilder.ExtrudePolygon("ringBody_" + label,
+            { shape: cProfile, depth: ringH }, scene, earcut);
+        body.material = milestone ? mileMat : frostMat;
+        body.parent = stack;
+
+        // Felt lining inside the notch (both walls + inner end pad)
+        var feltLen = slotOuterX - SLOT_END;
+        [-1, 1].forEach(function (side) {
+            var wall = BABYLON.MeshBuilder.CreateBox("felt_" + label + side,
+                { width: feltLen, height: ringH - 0.02, depth: 0.02 }, scene);
+            wall.position.set(SLOT_END + feltLen / 2, -ringH / 2,
+                side * (SLIT_W / 2 - 0.01));
+            wall.material = feltMat;
+            wall.parent = body;
+        });
+        var endPad = BABYLON.MeshBuilder.CreateBox("feltEnd_" + label,
+            { width: 0.02, height: ringH - 0.02, depth: SLIT_W - 0.04 }, scene);
+        endPad.position.set(SLOT_END + 0.01, -ringH / 2, 0);
+        endPad.material = feltMat;
+        endPad.parent = body;
+
+        // Label band texture (transparent background + text only).
+        // Skip mipmaps to avoid dark bleeding when minified.
+        var dt = new BABYLON.DynamicTexture("ringDT_" + label,
+            { width: 2048, height: 128 }, scene, false);
+        dt.hasAlpha = true;
+        var c = dt.getContext();
+        c.clearRect(0, 0, 2048, 128);
+        // Transparent pixels are "black + alpha 0", so interpolation bleeds
+        // black into glyph edges and makes strokes look thicker. Nudge the
+        // RGB of transparent pixels toward the text color (1% alpha is invisible).
+        c.fillStyle = milestone ? "rgba(255,255,255,0.01)" : "rgba(74,74,74,0.01)";
+        c.fillRect(0, 0, 2048, 128);
+        c.fillStyle = milestone ? "#ffffff" : "#4a4a4a";
+        // Light weight (300) to match the thin print on the real rings.
+        // Resolves to Segoe UI Light (Windows) / Helvetica Neue Light (Mac),
+        // falling back to regular-weight Arial when unavailable.
+        if (label.length > 10) {
+            c.font = "80px 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+        } else {
+            c.font = "100px 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+        }
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        // Draw once at the front (world -Z = theta 3*pi/2 on the arc).
+        // The band's u starts at the notch edge (theta = a1), so derive
+        // the front position in u from that.
+        var uFront = (1.5 * Math.PI - slitHalfAngle) /
+                     (2 * Math.PI - 2 * slitHalfAngle);
+        var cx = uFront * 2048;
+        // Compensate the difference between the band's physical aspect
+        // (arc length / height) and the texture's (2048/128) with a
+        // horizontal scale, so the glyph aspect survives any ring radius.
+        var arcLen = (2 * Math.PI - 2 * slitHalfAngle) * (RING_R + 0.008);
+        var hScale = (2048 / 128) / (arcLen / (ringH - 0.04));
+        // Shrink the scale only when the label would spill past the
+        // band's ends (the notch edges).
+        var rawHalf = c.measureText(label).width / 2;
+        var maxHalf = Math.min(cx, 2048 - cx) - 8;
+        var s = Math.min(hScale, maxHalf / rawHalf);
+        c.save();
+        c.translate(cx, 66);
+        c.scale(s, 1);
+        c.fillText(label, 0, 0);
+        c.restore();
+        dt.update();
+
+        var bandMat = new BABYLON.StandardMaterial("bandMat_" + label, scene);
+        // See logoMat: diffuse+alpha channel so the label exports to glTF.
+        bandMat.diffuseTexture = dt;
+        bandMat.useAlphaFromDiffuseTexture = true;
+        bandMat.emissiveTexture = dt;
+        bandMat.disableLighting = true;
+        bandMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
+        bandMat.backFaceCulling = false;
+
+        // Label band: a ribbon along the arc, skipping the notch.
+        // The ribbon's u follows the path direction (increasing theta =
+        // rightward when seen from outside), so unlike the cylinder builder
+        // the text can be drawn as-is, without mirroring.
+        // v is decided by the pathArray order; [bottom, top] renders text
+        // upright. If it ever appears upside down, swap the two paths.
+        var pathBottom = [], pathTop = [];
+        var N = 96, RB = RING_R + 0.008;
+        for (var s = 0; s <= N; s++) {
+            var t = slitHalfAngle + (2 * Math.PI - 2 * slitHalfAngle) * (s / N);
+            var x = RB * Math.cos(t), z = RB * Math.sin(t);
+            pathBottom.push(new BABYLON.Vector3(x, -ringH + 0.02, z));
+            pathTop.push(new BABYLON.Vector3(x, -0.02, z));
+        }
+        var band = BABYLON.MeshBuilder.CreateRibbon("band_" + label,
+            { pathArray: [pathBottom, pathTop],
+              sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+        band.material = bandMat;
+        band.parent = body;
+        band.alphaIndex = 3;
+
+        return body;
+    }
+
+    // Edit this list to add rings (5-year milestones use milestone: true)
+    var years = [
+        ["2015",         false],
+        ["2016",         false],
+        ["2017 - 2018 ", false],
+        ["2018 - 2019 ", false],
+        ["2019 - 2020 ", false],
+        ["5 Years",      true ],
+        ["2020 - 2021 ", false],
+        ["2021 - 2022 ", false],
+        ["2022 - 2023 ", false],
+        ["2023 - 2024 ", false],
+        ["2024 - 2025 ", false],
+        ["10 Years",     true ],
+        ["2025 - 2026 ", false],
+        ["2026 - 2027 ", false]
+    ];
+
+    // Notch direction: 0 means local +X = toward the panel's left edge.
+    // The panel's side slots into the notch, recreating the clip-on gimmick.
+    var SLIT_DIR = 0;
+
+    var gap = 0.015;
+    // Start one gap above the base puck's top face (y=0.28). Without this the
+    // first ring's bottom would be coplanar with the puck top and Z-fight.
+    var yPos = 0.28 + gap;
+    for (var r = 0; r < years.length; r++) {
+        var ring = createRing(years[r][0], years[r][1]);
+        // Extrusion goes -Y (top face at local y=0), so place by the top
+        ring.position.y = yPos + ringH;
+        ring.rotation.y = SLIT_DIR;   // align the notch on every ring
+        yPos += ringH + gap;
+    }
+
+    // Per the real structure: rings are held only by the panel-edge clip
+    // and stacking, so there is no center rod.
+
+    // ---------- Desk (with mirror reflection) ----------
+    var ground = BABYLON.MeshBuilder.CreateGround("ground",
+        { width: 40, height: 40 }, scene);
+    var groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+    groundMat.diffuseColor = new BABYLON.Color3(0.09, 0.065, 0.05);
+    groundMat.specularColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+    var mirror = new BABYLON.MirrorTexture("mirror", 1024, scene, true);
+    mirror.mirrorPlane = new BABYLON.Plane(0, -1, 0, 0);
+    mirror.level = 0.35;
+    groundMat.reflectionTexture = mirror;
+    ground.material = groundMat;
+    ground.receiveShadows = true;
+
+    mirror.renderList = scene.meshes.filter(function (m) {
+        return m !== ground;
+    });
+
+    // ---------- Shadows ----------
+    var sg = new BABYLON.ShadowGenerator(1024, dirLight);
+    sg.useBlurExponentialShadowMap = true;
+    sg.blurKernel = 32;
+    sg.transparencyShadow = true;
+    sg.addShadowCaster(panel);
+    sg.addShadowCaster(blueSail);
+    stack.getChildMeshes().forEach(function (m) {
+        sg.addShadowCaster(m);
+    });
+
+    return scene;
+};
+
+window.initFunction = async function() {
+
+  var asyncEngineCreation = async function() {
+    try {
+      return createDefaultEngine();
+    } catch(e) {
+      console.log("the available createEngine function failed. Creating the default engine instead");
+      return createDefaultEngine();
+    }
+  }
+
+  window.engine = await asyncEngineCreation();
+
+  const engineOptions = window.engine.getCreationOptions?.();
+  if (!engineOptions || engineOptions.audioEngine !== false) {
+
+  }
+  if (!engine) throw 'engine should not be null.';
+  startRenderLoop(engine, canvas);
+  window.scene = createScene();
+};
+initFunction().then(() => {
+  sceneToRender = scene;
+});
+
+// Resize
+window.addEventListener("resize", function () {
+  engine.resize();
+});
+
+    </script>
+</body>
+</html>
