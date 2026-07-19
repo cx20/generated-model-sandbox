@@ -127,11 +127,33 @@ var createScene = async function () {
     hemi.intensity = 0.35;
 
     // ---------- Materials ----------
+    // Two rendering modes share these materials:
+    //  - LIVE (this page): plain alpha blending. Babylon's realtime
+    //    subSurface refraction can only sample the .env texture - not the
+    //    scene behind the glass - so with refraction on, the monolith reads
+    //    as a mirror slab and the rings/inscription behind it disappear.
+    //    Alpha blending shows the actual scene through the glass.
+    //  - EXPORT: the Export GLB handler (bottom of the file) temporarily
+    //    flips these materials to physical crystal - albedo white, alpha 1,
+    //    subSurface refraction ON - so Babylon's serializer emits
+    //    KHR_materials_transmission / ior / volume (+attenuation) /
+    //    dispersion, then restores the live settings. glTF viewers with
+    //    transmission support then render true crystal, with the cobalt
+    //    color coming from volume attenuation (thicker = deeper blue).
+    // The subSurface parameters are pre-configured here (inert while
+    // isRefractionEnabled is false).
     var clearGlass = new BABYLON.PBRMaterial("clearGlass", scene);
     clearGlass.albedoColor = new BABYLON.Color3(0.9, 0.93, 0.95);
     clearGlass.metallic = 0;
     clearGlass.roughness = 0.03;
-    clearGlass.alpha = 0.15;
+    clearGlass.alpha = 0.08;   // very transparent crystal
+    clearGlass.subSurface.refractionIntensity = 1.0;
+    clearGlass.subSurface.indexOfRefraction = 1.52;   // crown glass
+    clearGlass.subSurface.minimumThickness = 0;
+    clearGlass.subSurface.maximumThickness = 0.28;    // = panel thickness TP
+    // Barely-there cool tint so thick clear regions read as crystal, not air
+    clearGlass.subSurface.tintColor = new BABYLON.Color3(0.93, 0.96, 1.0);
+    clearGlass.subSurface.tintColorAtDistance = 2.0;
     clearGlass.backFaceCulling = false;
     clearGlass.twoSidedLighting = true;
     clearGlass.separateCullingPass = true;
@@ -139,11 +161,21 @@ var createScene = async function () {
 
     var blueGlass = new BABYLON.PBRMaterial("blueGlass", scene);
     // Same cobalt blue as the milestone rings (mileMat below), so the sail
-    // and the "5/10 Years" rings read as the same glass.
+    // and the "5/10 Years" rings read as the same glass. The subSurface tint
+    // mirrors this color for the exported volume attenuation.
     blueGlass.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
     blueGlass.metallic = 0;
     blueGlass.roughness = 0.06;
     blueGlass.alpha = 0.8;
+    blueGlass.subSurface.refractionIntensity = 1.0;
+    blueGlass.subSurface.indexOfRefraction = 1.52;
+    blueGlass.subSurface.minimumThickness = 0;
+    blueGlass.subSurface.maximumThickness = 1.2;      // wedge depth scale
+    blueGlass.subSurface.tintColor = new BABYLON.Color3(0.04, 0.22, 0.8);
+    blueGlass.subSurface.tintColorAtDistance = 0.6;
+    // Subtle rainbow fringing on the crystal edges (KHR_materials_dispersion)
+    blueGlass.subSurface.isDispersionEnabled = true;
+    blueGlass.subSurface.dispersion = 0.15;
     blueGlass.backFaceCulling = false;
     blueGlass.twoSidedLighting = true;
     blueGlass.separateCullingPass = true;
@@ -576,6 +608,89 @@ var createScene = async function () {
     globe.parent = trophy;
     globe.alphaIndex = 2;   // draw after the glass panel
 
+    // --- Front lens face for the globe (export/viewer trick) ---
+    // glTF viewers compute transmission refraction from the normals of the
+    // FRONTMOST transmissive surface only. Seen from the back, that surface
+    // is the carved dimple wall, so the concave-lens look works; seen from
+    // the front it is the panel's flat face, so the globe shows no lens
+    // distortion at all. This disc floats a hair in front of the panel over
+    // the globe area: its geometry is flat (the real trophy's front face is
+    // flat), but its NORMALS are those of the dimple's sphere mirrored to
+    // face the viewer - viewers refract along the normals, so the globe
+    // region gets the same lens distortion from the front. It shares
+    // clearGlass, so in the live scene (alpha 0.08) it is invisible and it
+    // flips to crystal mode on export automatically.
+    var lensPos = [], lensNrm = [], lensIdx = [];
+    var LENS_Z = -TP / 2 - 0.004;   // just proud of the panel's front face
+    for (var li = 0; li <= CAP_RINGS; li++) {
+        var lrho = GLOBE_R * li / CAP_RINGS;
+        var ldz = Math.sqrt(Math.max(GLOBE_SR * GLOBE_SR - lrho * lrho, 0));
+        for (var lsi = 0; lsi <= CAP_SEG; lsi++) {
+            var lth = lsi / CAP_SEG * 2 * Math.PI;
+            var lx = lrho * Math.cos(lth), ly = lrho * Math.sin(lth);
+            lensPos.push(lx, GLOBE_Y + ly, LENS_Z);
+            // Dimple-wall normals mirrored in z: a concave surface as seen
+            // from the front (-z), matching the back-side lens character.
+            lensNrm.push(lx / GLOBE_SR, ly / GLOBE_SR, -ldz / GLOBE_SR);
+        }
+    }
+    for (var lr = 0; lr < CAP_RINGS; lr++) {
+        for (var ls = 0; ls < CAP_SEG; ls++) {
+            var la = lr * (CAP_SEG + 1) + ls;
+            var lb = la + 1;
+            var lc = la + CAP_SEG + 1;
+            var ld = lc + 1;
+            lensIdx.push(la, lb, lc, lb, ld, lc);
+        }
+    }
+    var lensVD = new BABYLON.VertexData();
+    lensVD.positions = lensPos;
+    lensVD.normals = lensNrm;
+    lensVD.indices = lensIdx;
+    var lensFront = new BABYLON.Mesh("globeLensFront", scene);
+    lensVD.applyToMesh(lensFront);
+    lensFront.material = clearGlass;
+    lensFront.parent = trophy;
+    lensFront.alphaIndex = 1;
+
+    // --- Front map layer (export/viewer companion of globeLensFront) ---
+    // Through-glass detail dies in glTF viewers: transmission surfaces
+    // sample a DOWNSCALED, mip-blurred copy of the opaque pass, so the 2px
+    // continent dots of the in-dimple map dissolve to nothing when seen
+    // through the panel + lens from the front (from the back the map is
+    // viewed directly, hence visible). Like the real trophy - where the
+    // etched map itself reads clearly from the front while the BACKGROUND
+    // distorts through the cavity - this disc repeats the map texture just
+    // in front of the lens, so viewers draw it crisply on top of the
+    // refracted background. It is enabled only for export (see
+    // setCrystalExportMode): in the live alpha-blend scene the in-dimple
+    // cap is already visible from the front, and a second layer would show
+    // as a parallax double image.
+    var mapFrontPos = [], mapFrontNrm = [], mapFrontUV = [];
+    var MAPF_Z = LENS_Z - 0.003;
+    for (var mi2 = 0; mi2 <= CAP_RINGS; mi2++) {
+        var mrho = GLOBE_R * mi2 / CAP_RINGS;
+        for (var msi = 0; msi <= CAP_SEG; msi++) {
+            var mth = msi / CAP_SEG * 2 * Math.PI;
+            var mx2 = mrho * Math.cos(mth), my2 = mrho * Math.sin(mth);
+            mapFrontPos.push(mx2, GLOBE_Y + my2, MAPF_Z);
+            mapFrontNrm.push(0, 0, -1);
+            mapFrontUV.push(mx2 / (2 * GLOBE_R) + 0.5,
+                            my2 / (2 * GLOBE_R) + 0.5);
+        }
+    }
+    var mapFrontVD = new BABYLON.VertexData();
+    mapFrontVD.positions = mapFrontPos;
+    mapFrontVD.normals = mapFrontNrm;
+    mapFrontVD.uvs = mapFrontUV;
+    mapFrontVD.indices = lensIdx;   // same grid topology as the lens disc
+    var globeMapFront = new BABYLON.Mesh("globeMapFront", scene);
+    mapFrontVD.applyToMesh(globeMapFront);
+    globeMapFront.material = globeMat;
+    globeMapFront.parent = trophy;
+    globeMapFront.alphaIndex = 3;   // draws above the lens disc
+    globeMapFront.setEnabled(false);   // export-only, see comment above
+
     // ---------- Year ring stack ----------
     // Each ring is "a solid disc with one rectangular notch cut from the
     // rim almost to the center":
@@ -604,14 +719,21 @@ var createScene = async function () {
     frostMat.twoSidedLighting = true;
 
     // Milestone rings ("5 Years" / "10 Years"): translucent cobalt-blue
-    // glass, like the real ring. The felt notch and a ghost of the
-    // far-side band show through, matching the photos; alpha 0.8 (same
-    // as the sail) keeps the front label legible.
+    // glass, like the real ring; alpha 0.8 keeps the front label legible.
+    // The subSurface parameters are for the export-time crystal flip (see
+    // the Materials comment above), with a smaller thickness scale to match
+    // the ring's size.
     var mileMat = new BABYLON.PBRMaterial("mileMat", scene);
     mileMat.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
     mileMat.metallic = 0;
     mileMat.roughness = 0.05;
     mileMat.alpha = 0.8;
+    mileMat.subSurface.refractionIntensity = 1.0;
+    mileMat.subSurface.indexOfRefraction = 1.52;
+    mileMat.subSurface.minimumThickness = 0;
+    mileMat.subSurface.maximumThickness = 0.6;
+    mileMat.subSurface.tintColor = new BABYLON.Color3(0.04, 0.22, 0.8);
+    mileMat.subSurface.tintColorAtDistance = 0.35;
     mileMat.backFaceCulling = false;
     mileMat.twoSidedLighting = true;
     mileMat.separateCullingPass = true;
@@ -964,21 +1086,53 @@ window.addEventListener("resize", function () {
 // Serializes the live scene to models/gltf/Trophy/glTF-Binary/Trophy.glb.
 // The desk is scenery, not part of the trophy, so it is excluded - this
 // matches the mesh set in the committed export.
+
+// Flip the glass materials between the LIVE look (alpha blending, colored
+// albedo) and the EXPORT crystal look (albedo white, alpha 1, subSurface
+// refraction ON). With refraction on, Babylon's glTF serializer emits
+// KHR_materials_transmission / ior / volume / dispersion; the cobalt color
+// then comes from the volume attenuation (subSurface.tintColor), already
+// configured on the materials. See the Materials section in createScene.
+function setCrystalExportMode(s, on) {
+  ["clearGlass", "blueGlass", "mileMat"].forEach(function (name) {
+    var m = s.getMaterialByName(name);
+    if (!m) return;
+    if (on) {
+      m._liveAlpha = m.alpha;
+      m._liveAlbedo = m.albedoColor.clone();
+      m.albedoColor = new BABYLON.Color3(1, 1, 1);
+      m.alpha = 1;
+      m.subSurface.isRefractionEnabled = true;
+    } else {
+      m.subSurface.isRefractionEnabled = false;
+      m.alpha = m._liveAlpha;
+      m.albedoColor = m._liveAlbedo;
+    }
+  });
+  // The front map layer only exists for the exported file (in the live
+  // alpha-blend scene it would double-image with the in-dimple map).
+  var mapFront = s.getMeshByName("globeMapFront");
+  if (mapFront) mapFront.setEnabled(on);
+}
+
 document.getElementById("exportGlb").addEventListener("click", function () {
   var btn = this;
   if (!scene) return;
   btn.disabled = true;
   btn.textContent = "Exporting...";
 
+  setCrystalExportMode(scene, true);
   BABYLON.GLTF2Export.GLBAsync(scene, "Trophy", {
     shouldExportNode: function (node) {
       return node.name !== "ground";
     }
   }).then(function (glb) {
+    setCrystalExportMode(scene, false);
     glb.downloadFiles();
     btn.disabled = false;
     btn.textContent = "Export GLB";
   }).catch(function (e) {
+    setCrystalExportMode(scene, false);
     console.error("GLB export failed:", e);
     btn.disabled = false;
     btn.textContent = "Export failed - retry";
