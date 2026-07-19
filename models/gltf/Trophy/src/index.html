@@ -78,7 +78,8 @@ var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, 
 //  - Clear panel: a plain monolith-like rectangular slab
 //  - Blue sail: a wedge from a deep base to a top edge of panel thickness
 //  - MVP logo: placed on the back-tilted front face via computed normal
-//  - Globe: lens-shaped squashed sphere with a Winkel Tripel world map
+//  - Globe: spherical scoop cut into the panel's back face (CSG), with a
+//    Winkel Tripel world map etched on the wall of the scoop
 //  - Year rings: slotted discs that clip onto the panel's side edge
 //    (no center rod - held by the clip and stacking alone);
 //    milestone rings ("5/10 Years") are translucent blue glass and all
@@ -137,7 +138,9 @@ var createScene = async function () {
     clearGlass.environmentIntensity = 1.2;
 
     var blueGlass = new BABYLON.PBRMaterial("blueGlass", scene);
-    blueGlass.albedoColor = new BABYLON.Color3(0.03, 0.16, 0.6);
+    // Same cobalt blue as the milestone rings (mileMat below), so the sail
+    // and the "5/10 Years" rings read as the same glass.
+    blueGlass.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
     blueGlass.metallic = 0;
     blueGlass.roughness = 0.06;
     blueGlass.alpha = 0.8;
@@ -158,13 +161,35 @@ var createScene = async function () {
     var W = 1.32;           // half width (widened by 1.2x)
     var TP = 0.28;          // clear panel thickness
     var PANEL_H = 5.6;      // panel height
-    var SAIL_L = -0.68;     // left end of the sail base (narrowed so the
-                            // fully-inserted ring stack clears the sail)
+    var SAIL_L = -1.05;     // left end of the sail base: lands UNDER the
+                            // lowest ring (world x -0.25, inside the ring's
+                            // footprint). The hypotenuse only rises above the
+                            // lowest ring's bottom plane where the ring's rim
+                            // is cut away by its notch, so the overlap with
+                            // actual ring material is a sub-visible sliver.
+    var PUCK_H = 0.28;      // base slab height; the panel stands on its top
+
+    // Globe dimple: the globe is not a convex lens stuck on the panel - it is
+    // a shallow spherical scoop ground into the BACK face of the clear panel.
+    // Its side profile is therefore a "D": the flat back plane closed off by a
+    // circular arc biting into the glass. A cap of radius GLOBE_R and depth
+    // GLOBE_DEPTH is the intersection of the panel with a sphere of radius
+    // GLOBE_SR = (r^2 + d^2) / 2d, centered GLOBE_SR - GLOBE_DEPTH behind the
+    // back face.
+    var GLOBE_R = 0.58;        // radius of the circle seen on the back face
+    var GLOBE_DEPTH = 0.16;    // depth of the scoop (panel is TP = 0.28 thick)
+    var GLOBE_Y = 4.905;       // height of the dimple center (raised by one
+                               // ring: ringH 0.34 + stacking gap 0.015)
+    var GLOBE_SR = (GLOBE_R * GLOBE_R + GLOBE_DEPTH * GLOBE_DEPTH)
+                 / (2 * GLOBE_DEPTH);
+    var GLOBE_CZ = TP / 2 + (GLOBE_SR - GLOBE_DEPTH);   // cutter sphere center
 
     // --- Clear panel (a plain, monolith-like rectangular slab) ---
+    // Its bottom face sits on the base slab's top (PUCK_H), not on the
+    // ground; the 0.004 gap keeps the two clear-glass faces from Z-fighting.
     var panel = BABYLON.MeshBuilder.CreateBox("panel",
         { width: 2 * W, height: PANEL_H, depth: TP }, scene);
-    panel.position.y = PANEL_H / 2 + 0.02;
+    panel.position.y = PANEL_H / 2 + PUCK_H + 0.004;
     // Bake the height offset into the vertices so the panel's local transform
     // is identity, matching blueSail (whose vertices are already in trophy
     // space). The CSG2 boolean below can then run in trophy-local space and
@@ -180,7 +205,9 @@ var createScene = async function () {
     // left edge (SAIL_L) so the ring stack, pushed fully onto the panel,
     // does not collide with the sail.
     var ZF = -0.84;     // front edge of the base (depth reduced to 0.8x)
-    var ZB = 0.4;       // back edge of the base (behind the panel's back face)
+    var ZB = TP / 2;    // back edge of the base, flush with the panel's back
+                        // face: the sail's back face is vertical (same plane
+                        // as the monolith), no bulge behind the panel
     var BASE_Y = 0;     // the sail sits directly on the ground
     // Top edge sits at x = W so the sail's right side is vertical and flush
     // with the panel's right face (base-right is already at x = W).
@@ -228,17 +255,31 @@ var createScene = async function () {
     // above), hence ignoreWorldMatrix = true; the result is parented to trophy.
     // This runs while blueSail is still a shared-vertex indexed mesh - the
     // flat-shading conversion splits vertices, which would break manifoldness.
+    // The same pass also scoops the globe dimple out of the back face with a
+    // second subtraction (see the GLOBE_* constants above).
     if (csgReady) {
+        // Cutter sphere for the dimple. Its transform is baked in so it lives
+        // in trophy-local space like the other two operands.
+        var dimple = BABYLON.MeshBuilder.CreateSphere("dimple",
+            { diameter: 2 * GLOBE_SR, segments: 96 }, scene);
+        dimple.position.set(0, GLOBE_Y, GLOBE_CZ);
+        dimple.bakeCurrentTransformIntoVertices();
+
         var panelCSG = BABYLON.CSG2.FromMesh(panel, true);
         var sailCSG = BABYLON.CSG2.FromMesh(blueSail, true);
+        var dimpleCSG = BABYLON.CSG2.FromMesh(dimple, true);
         var diff = panelCSG.subtract(sailCSG);
+        var diff2 = diff.subtract(dimpleCSG);
         // centerMesh defaults to true, which re-centers the result's vertices
         // on the origin without compensating mesh.position - that would drop
         // the panel by half its height. Keep the original coordinates.
-        var carved = diff.toMesh("panel", scene, { centerMesh: false });
+        var carved = diff2.toMesh("panel", scene, { centerMesh: false });
+        diff2.dispose();
         diff.dispose();
         panelCSG.dispose();
         sailCSG.dispose();
+        dimpleCSG.dispose();
+        dimple.dispose();
         panel.dispose();
 
         panel = carved;
@@ -308,7 +349,9 @@ var createScene = async function () {
     // (The face's horizontal direction is the X axis itself, so an X offset
     // keeps the plane on the face.)
     var logoY = 1.0;
-    var logoXOffset = 0.12;   // re-tuned after narrowing the sail base
+    var logoXOffset = 0.2;    // keeps the logo at the same spot on the face
+                              // after widening the sail base to SAIL_L -1.05
+                              // (baseMid moved left; offset compensates)
     var baseMid = new BABYLON.Vector3((SAIL_L + W) / 2, BASE_Y, ZF);
     var tLogo = (logoY - BASE_Y) / (topFront.y - BASE_Y);
     var logoCenter = baseMid.add(topFront.subtract(baseMid).scale(tLogo))
@@ -333,7 +376,9 @@ var createScene = async function () {
     var ic = insDT.getContext();
     ic.clearRect(0, 0, 512, 256);
     ic.fillStyle = "rgba(255,255,255,0.85)";
-    ic.font = "italic 30px Georgia";
+    // 36px: the longest line measures 469px, which still fits the 512px
+    // texture with the 30px left margin.
+    ic.font = "italic 36px Georgia";
     ic.textAlign = "left";
     var lines = [
         "We recognize and value your",
@@ -342,7 +387,7 @@ var createScene = async function () {
         "worldwide."
     ];
     for (var i = 0; i < lines.length; i++) {
-        ic.fillText(lines[i], 30, 60 + i * 46);
+        ic.fillText(lines[i], 30, 67 + i * 55);
     }
     insDT.update();
 
@@ -358,12 +403,19 @@ var createScene = async function () {
 
     var insPlane = BABYLON.MeshBuilder.CreatePlane("insPlane",
         { width: 1.9, height: 0.95 }, scene);
-    insPlane.position.set(0.22, 3.45, -TP / 2 - 0.01);   // shifted right
+    // x = 0: the text's left edge (30px margin in the 512px texture =
+    // 0.11 world on the 1.9-wide plane, i.e. -0.84 trophy-local) lines up
+    // with the ring stack's right edge (world -0.035 = trophy-local -0.835).
+    // z = 0: like the real trophy, the inscription is engraved INSIDE the
+    // glass, so the plane sits at the panel's mid-thickness, not on its
+    // front face. It draws after the panel (alphaIndex 2) so it stays
+    // visible through the glass.
+    insPlane.position.set(0, 3.45, 0);
     insPlane.material = insMat;
     insPlane.parent = trophy;
     insPlane.alphaIndex = 2;
 
-    // --- Globe (lens-shaped squashed sphere + Winkel Tripel world map) ---
+    // --- Globe map (Winkel Tripel projection, etched on the dimple wall) ---
     // Read the pixels of worldHeightMap.jpg (equirectangular) and splat
     // them through the forward Winkel Tripel projection
     // (standard parallel arccos(2/pi) ~= 50.5 deg,
@@ -477,54 +529,52 @@ var createScene = async function () {
     globeMat.disableLighting = true;
     globeMat.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
 
-    var globe = BABYLON.MeshBuilder.CreateSphere("globe",
-        { diameter: 1.16, segments: 48, updatable: true }, scene);   // 0.8x of 1.45
-    globe.scaling.z = 0.34;   // bulges slightly beyond the 0.28 panel thickness
-    globe.position.set(0, 4.55, 0);
+    // The map is visible from both sides of the glass, and its lighting is
+    // baked (disableLighting), so culling would only hide it from the front.
+    globeMat.backFaceCulling = false;
+
+    // The map is etched on the WALL of the dimple, so its carrier is a
+    // spherical cap matching that wall: same center as the cutter sphere, a
+    // hair smaller in radius so it floats inside the scoop instead of
+    // z-fighting the carved glass.
+    // Spherical wrapping would distort a flat map, so the UVs are a planar
+    // projection along Z (the real trophy has a flat map etched on the scoop).
+    var CAP_SR = GLOBE_SR - 0.004;
+    var CAP_RINGS = 24;    // subdivisions from the center out to the rim
+    var CAP_SEG = 96;      // subdivisions around
+    var capPos = [], capNrm = [], capUV = [], capIdx = [];
+    for (var ri = 0; ri <= CAP_RINGS; ri++) {
+        var rho = GLOBE_R * ri / CAP_RINGS;
+        var dz = Math.sqrt(Math.max(CAP_SR * CAP_SR - rho * rho, 0));
+        for (var si = 0; si <= CAP_SEG; si++) {
+            var th = si / CAP_SEG * 2 * Math.PI;
+            var cx = rho * Math.cos(th), cy = rho * Math.sin(th);
+            capPos.push(cx, GLOBE_Y + cy, GLOBE_CZ - dz);
+            // Outward = away from the glass, i.e. toward the sphere center.
+            capNrm.push(-cx / CAP_SR, -cy / CAP_SR, dz / CAP_SR);
+            capUV.push(cx / (2 * GLOBE_R) + 0.5, cy / (2 * GLOBE_R) + 0.5);
+        }
+    }
+    for (var ri2 = 0; ri2 < CAP_RINGS; ri2++) {
+        for (var si2 = 0; si2 < CAP_SEG; si2++) {
+            var ia = ri2 * (CAP_SEG + 1) + si2;
+            var ib = ia + 1;
+            var ic = ia + CAP_SEG + 1;
+            var id = ic + 1;
+            capIdx.push(ia, ic, ib, ib, ic, id);
+        }
+    }
+    var capVD = new BABYLON.VertexData();
+    capVD.positions = capPos;
+    capVD.normals = capNrm;
+    capVD.uvs = capUV;
+    capVD.indices = capIdx;
+
+    var globe = new BABYLON.Mesh("globe", scene);
+    capVD.applyToMesh(globe);
     globe.material = globeMat;
     globe.parent = trophy;
     globe.alphaIndex = 2;   // draw after the glass panel
-
-    // Spherical wrapping would distort a flat map, so re-map the UVs to a
-    // planar projection from the front (matches the real trophy, where a
-    // flat map is etched onto the lens).
-    var gp = globe.getVerticesData(BABYLON.VertexBuffer.PositionKind);
-    var guv = globe.getVerticesData(BABYLON.VertexBuffer.UVKind);
-    var gd = 1.16;   // sphere diameter
-    for (var vi = 0; vi < gp.length / 3; vi++) {
-        guv[vi * 2]     = gp[vi * 3]     / gd + 0.5;
-        guv[vi * 2 + 1] = gp[vi * 3 + 1] / gd + 0.5;
-    }
-    globe.updateVerticesData(BABYLON.VertexBuffer.UVKind, guv);
-
-    // --- Glass lens body (convex lens with PBR refraction) ---
-    // The squashed sphere already has a convex-lens profile. Give it a clear
-    // glass PBR material whose refraction bends the surrounding environment,
-    // like looking through a real glass lens. Refraction samples
-    // scene.environmentTexture (the .env), so there is no extra render pass.
-    // It sits just INSIDE the map shell (diameter 1.14 < 1.16), so the etched
-    // continents stay on top and the glass shows through the transparent gaps.
-    var lensMat = new BABYLON.PBRMaterial("lensMat", scene);
-    lensMat.albedoColor = new BABYLON.Color3(1, 1, 1);
-    lensMat.metallic = 0.0;
-    lensMat.roughness = 0.02;                 // polished glass -> sharp highlights
-    lensMat.environmentIntensity = 1.3;
-    lensMat.subSurface.isRefractionEnabled = true;
-    lensMat.subSurface.indexOfRefraction = 1.52;   // crown glass (~1.5); raise to bend more
-    lensMat.subSurface.refractionIntensity = 1.0;
-    lensMat.subSurface.tintColor = new BABYLON.Color3(0.9, 0.95, 1.0);  // faint cool glass tint
-    // Chromatic dispersion adds a subtle rainbow fringe at the lens edges,
-    // like real optical glass. Ignored on Babylon versions without it.
-    lensMat.subSurface.isDispersionEnabled = true;
-    lensMat.subSurface.dispersion = 1.2;
-    lensMat.backFaceCulling = false;
-
-    var lens = BABYLON.MeshBuilder.CreateSphere("lens",
-        { diameter: 1.14, segments: 48 }, scene);
-    lens.scaling.z = 0.34;
-    lens.position.copyFrom(globe.position);
-    lens.material = lensMat;
-    lens.parent = trophy;
 
     // ---------- Year ring stack ----------
     // Each ring is "a solid disc with one rectangular notch cut from the
@@ -541,7 +591,7 @@ var createScene = async function () {
     var RING_R = 0.525;    // radius (reduced to 0.7x)
     var SLIT_W = 0.34;     // notch width (slightly wider than the 0.28 panel)
     var SLOT_END = 0.0;    // x coordinate of the notch's inner end (near center)
-    var ringH  = 0.34;     // ring thickness (height)
+    var ringH  = 0.374;    // ring thickness (height; 0.34 x 1.1)
 
     // Frosted-glass ring body material.
     // Kept opaque: if translucent, the far-side label band shows through
@@ -592,12 +642,93 @@ var createScene = async function () {
     var slitHalfAngle = Math.asin((SLIT_W / 2) / RING_R);
     var slotOuterX = RING_R * Math.cos(slitHalfAngle);   // where the notch meets the rim
 
-    // Clear base puck (also gets a notch to receive the panel)
-    var puckProfile = buildSlotDiscProfile(0.63, SLIT_W, 0.0);
+    // Profile of a "reverse D" slab: a semicircular nose on -X (where the
+    // ring stack drops on) extended by a straight rectangular tail to +X,
+    // reaching under the panel all the way to the blue sail. Matches the
+    // bottom view of the drawing: rectangle with a half-round left end.
+    // xNose shifts the nose's center along +X (the tail end stays at xEnd).
+    function buildDSlabProfile(R, xEnd, xNose) {
+        var pts = [];
+        var N = 96;
+        for (var i = 0; i <= N; i++) {
+            // PI/2 -> 3*PI/2: (0, R) through (-R, 0) to (0, -R)
+            var t = Math.PI / 2 + Math.PI * (i / N);
+            pts.push(new BABYLON.Vector3(xNose + R * Math.cos(t), 0,
+                                         R * Math.sin(t)));
+        }
+        pts.push(new BABYLON.Vector3(xEnd, 0, -R));
+        pts.push(new BABYLON.Vector3(xEnd, 0,  R));
+        return pts;   // the polygon closes back to (xNose, R)
+    }
+
+    // Clear base slab. The tail runs under the panel's left part and into
+    // the widened sail (0.35 of the way to their shared right face x = W;
+    // longer tails looked overstretched). The panel stands on its top (see
+    // PUCK_H); the sail stands on the FLOOR and passes through the slab, so
+    // its footprint is carved out of the slab right below (CSG).
+    var SLAB_END_LOCAL = ((trophy.position.x + W) - stack.position.x) * 0.35;
+    // Nose radius = RING_R and no nose shift: the slab's round left end
+    // lines up exactly under the ring stack's left edge.
+    var NOSE_SHIFT = 0;
+    var puckProfile = buildDSlabProfile(RING_R, SLAB_END_LOCAL, NOSE_SHIFT);
     var baseDisc = BABYLON.MeshBuilder.ExtrudePolygon("baseDisc",
-        { shape: puckProfile, depth: 0.28 }, scene, earcut);
-    baseDisc.position.y = 0.28;    // extrusion goes -Y, so position by the top face
+        { shape: puckProfile, depth: PUCK_H }, scene, earcut);
+    baseDisc.position.y = PUCK_H;  // extrusion goes -Y, so position by the top face
+    // Bake the y offset into the vertices NOW, while the slab is still
+    // unparented: bakeCurrentTransformIntoVertices bakes the WORLD matrix,
+    // so baking after parenting would fold the stack's offset into the
+    // vertices and the parent transform would then apply it a second time.
+    baseDisc.bakeCurrentTransformIntoVertices();
     baseDisc.material = clearGlass;
+
+    // --- Carve the sail's footprint out of the slab (CSG) ---
+    // The cutter reuses the sail's vertex data (positions/indices are still
+    // in scope), shifted from trophy-local to stack-local x and inflated ~1%
+    // around the base center so the carved clear-glass walls sit a hair off
+    // the blue faces instead of Z-fighting them.
+    // In z the cutter is stretched x3: the slab is deeper than the sail
+    // (0.525 vs the sail's back face at TP/2), and without the stretch the
+    // slab's back strip would survive as a box poking out beside the sail.
+    // Stretching keeps the x-y silhouette, so that strip gets cut along the
+    // same slope as the sail's hypotenuse face.
+    if (csgReady) {
+        var X_OFF = trophy.position.x - stack.position.x;
+        var scx = (SAIL_L + W) / 2 + X_OFF;
+        var scz = (ZF + ZB) / 2;
+        var cutPos = [];
+        for (var ci = 0; ci < positions.length; ci += 3) {
+            cutPos.push(
+                scx + (positions[ci] + X_OFF - scx) * 1.01,
+                positions[ci + 1] * 1.01 - 0.02,   // dip below the slab bottom
+                scz + (positions[ci + 2] - scz) * 3);
+        }
+        var cutNrm = [];
+        BABYLON.VertexData.ComputeNormals(cutPos, indices, cutNrm);
+        var cutVD = new BABYLON.VertexData();
+        cutVD.positions = cutPos;
+        cutVD.indices = indices;
+        cutVD.normals = cutNrm;
+        cutVD.uvs = new Array(12).fill(0);   // match the slab's attributes
+        var sailCutter = new BABYLON.Mesh("sailCutter", scene);
+        cutVD.applyToMesh(sailCutter);
+
+        // Both operands are in stack-local space (the slab's y offset is
+        // already baked above), so boolean with ignoreWorldMatrix = true.
+        var slabCSG = BABYLON.CSG2.FromMesh(baseDisc, true);
+        var cutterCSG = BABYLON.CSG2.FromMesh(sailCutter, true);
+        var slabDiff = slabCSG.subtract(cutterCSG);
+        var carvedSlab = slabDiff.toMesh("baseDisc", scene,
+            { centerMesh: false });
+        slabDiff.dispose();
+        slabCSG.dispose();
+        cutterCSG.dispose();
+        sailCutter.dispose();
+        baseDisc.dispose();
+
+        baseDisc = carvedSlab;
+        baseDisc.material = clearGlass;
+    }
+    // Parent LAST (whether carved or not) - see the bake note above.
     baseDisc.parent = stack;
 
     function createRing(label, milestone) {
@@ -753,9 +884,9 @@ var createScene = async function () {
     var SLIT_DIR = 0;
 
     var gap = 0.015;
-    // Start one gap above the base puck's top face (y=0.28). Without this the
+    // Start one gap above the base slab's top face (y=PUCK_H). Without this the
     // first ring's bottom would be coplanar with the puck top and Z-fight.
-    var yPos = 0.28 + gap;
+    var yPos = PUCK_H + gap;
     for (var r = 0; r < years.length; r++) {
         var ring = createRing(years[r][0], years[r][1]);
         // Extrusion goes -Y (top face at local y=0), so place by the top
