@@ -717,30 +717,31 @@ var createScene = async function () {
     var SLOT_END = 0.0;    // x coordinate of the notch's inner end (near center)
     var ringH  = 0.374;    // ring thickness (height; 0.34 x 1.1)
 
-    // Frosted-glass ring body material.
-    // Alpha stays 1 (opaque): if alpha-translucent, the far-side label band
-    // would show through sharply and the text overlaps illegibly. The milky
-    // translucency of the real ring comes from rough refraction instead
-    // (KHR_materials_volume spec: roughness affects both reflection and
-    // transmission, so the see-through image is heavily blurred):
-    //  - LIVE (this page): Babylon's realtime translucency approximates the
-    //    soft light bleed (realtime refraction only samples the .env, see
-    //    the Materials comment above, so true rough refraction is export-only)
-    //  - EXPORT: the Export GLB handler patches rough transmissive glass
-    //    (KHR_materials_transmission / volume / ior, roughness 0.4) onto
-    //    this material, see RING_FROST_EXTENSIONS
+    // Frosted-glass ring body material: rough transmissive glass, matching
+    // the exported GLB (KHR_materials_transmission / volume / ior with base
+    // roughness 0.4 - see RING_FROST_EXTENSIONS). Babylon's plain realtime
+    // refraction can only sample the .env, so the live scene recreates what
+    // the glTF loader's TransmissionHelper does for imported transmission
+    // materials: the opaque scene is rendered to a mip-mapped offscreen
+    // texture (opaqueRTT, created once all meshes exist) and assigned as
+    // this material's refraction background. Roughness then samples blurred
+    // mips, so the rings show the scene behind them heavily frosted and the
+    // far-side label band reads as a soft ghost - same as glTF viewers.
+    // Alpha stays 1: refraction is not linked to transparency, so the rings
+    // keep writing depth and the front lettering stays legible.
     var frostMat = new BABYLON.PBRMaterial("frostMat", scene);
     frostMat.albedoColor = new BABYLON.Color3(0.93, 0.93, 0.91);
     frostMat.metallic = 0;
     frostMat.roughness = 0.4;   // = RING_FROST_ROUGHNESS in the export
-    frostMat.subSurface.isTranslucencyEnabled = true;
-    frostMat.subSurface.translucencyIntensity = 0.8;
-    // Warm paper-white transmission tint (older Babylon builds without the
-    // property simply ignore the assignment guard).
-    if ("translucencyColor" in frostMat.subSurface) {
-        frostMat.subSurface.translucencyColor =
-            new BABYLON.Color3(0.98, 0.97, 0.94);
-    }
+    frostMat.subSurface.isRefractionEnabled = true;
+    frostMat.subSurface.refractionIntensity = 1.0;
+    frostMat.subSurface.indexOfRefraction = 1.49;    // acrylic
+    frostMat.subSurface.minimumThickness = 0;
+    frostMat.subSurface.maximumThickness = 0.35;     // ~ ring height (0.374)
+    frostMat.subSurface.tintColor = new BABYLON.Color3(0.98, 0.96, 0.9);
+    frostMat.subSurface.tintColorAtDistance = 0.5;
+    frostMat.subSurface.useAlbedoToTintRefraction = true;
+    // subSurface.refractionTexture is assigned where opaqueRTT is created
     frostMat.backFaceCulling = false;
     frostMat.twoSidedLighting = true;
 
@@ -1059,9 +1060,42 @@ var createScene = async function () {
     ground.material = groundMat;
     ground.receiveShadows = true;
 
+    // The frosted ring bodies are excluded: their refraction samples the
+    // opaque-pass texture (opaqueRTT below) with main-camera screen
+    // coordinates, which are wrong in the mirror pass and would reflect as
+    // a black column. The felt notch linings go with them - without the
+    // bodies around them they would reflect as a stack of dark boxes.
+    // The label bands and the milestone rings still reflect, which reads
+    // fine at this mirror level.
     mirror.renderList = scene.meshes.filter(function (m) {
-        return m !== ground;
+        return m !== ground && m.material !== frostMat
+            && m.material !== feltMat;
     });
+
+    // ---------- Opaque-pass texture for the frosted rings ----------
+    // Live equivalent of the glTF loader's TransmissionHelper, with the same
+    // settings (1024px, half float, 4x MSAA, mips with LOD offset -4, image
+    // processing off so the texture stays linear, clear color in linear
+    // space with alpha 0). Everything except the frosted ring bodies renders
+    // into it; assigning it as frostMat's refraction texture makes the rings
+    // refract the actual scene behind them - panel, label bands, skybox -
+    // blurred by the material roughness, instead of sampling only the .env.
+    // The texture is a render target, so the PBR material renders it
+    // automatically each frame; no customRenderTargets entry is needed.
+    var opaqueRTT = new BABYLON.RenderTargetTexture("opaqueSceneTexture",
+        1024, scene, true, undefined, BABYLON.Constants.TEXTURETYPE_HALF_FLOAT);
+    opaqueRTT.ignoreCameraViewport = true;
+    opaqueRTT.renderList = scene.meshes.filter(function (m) {
+        return m.material !== frostMat;
+    });
+    opaqueRTT.clearColor = scene.clearColor.toLinearSpace();
+    opaqueRTT.clearColor.a = 0;
+    opaqueRTT.gammaSpace = false;
+    opaqueRTT.lodGenerationScale = 1;
+    opaqueRTT.lodGenerationOffset = -4;
+    opaqueRTT.samples = 4;
+    opaqueRTT.disableImageProcessing = true;
+    frostMat.subSurface.refractionTexture = opaqueRTT;
 
     // ---------- Shadows ----------
     var sg = new BABYLON.ShadowGenerator(1024, dirLight);
