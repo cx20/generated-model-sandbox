@@ -117,15 +117,14 @@ var createScene = async function () {
 
     // IBL + skybox: prefiltered papermill environment hosted in the
     // cx20/gltf-test repo. The same cubemap drives the PBR lighting and is
-    // shown as the visible background (blur 0.3 keeps the backdrop softly
-    // out of focus behind the trophy).
+    // shown unblurred as the visible background.
     var envTex = BABYLON.CubeTexture.CreateFromPrefilteredData(
         "https://cx20.github.io/gltf-test/textures/env/papermillSpecularHDR.env",
         scene);
     scene.environmentTexture = envTex;
     scene.environmentIntensity = 1.0;
     // Creates the "hdrSkyBox" mesh (excluded from the GLB export below).
-    scene.createDefaultSkybox(envTex, true, 1000, 0.3);
+    scene.createDefaultSkybox(envTex, true, 1000);
 
     var dirLight = new BABYLON.DirectionalLight("dir",
         new BABYLON.Vector3(-0.4, -1, 0.6), scene);
