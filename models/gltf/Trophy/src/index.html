@@ -83,8 +83,8 @@ var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, 
 //  - Year rings: slotted discs that clip onto the panel's side edge
 //    (no center rod - held by the clip and stacking alone);
 //    milestone rings ("5/10 Years") are translucent blue glass, the white
-//    rings are milky subsurface-scattering acrylic (exported as
-//    KHR_materials_diffuse_transmission/volume/volume_scatter), and all
+//    rings are milky frosted glass (exported as rough-refraction
+//    KHR_materials_transmission/volume, roughness 0.4), and all
 //    ring lettering is embossed (baked highlight/shadow passes)
 // ============================================================
 
@@ -719,18 +719,20 @@ var createScene = async function () {
 
     // Frosted-glass ring body material.
     // Alpha stays 1 (opaque): if alpha-translucent, the far-side label band
-    // would show through and the text overlaps illegibly. The milky
-    // translucency of the real ring comes from subsurface scattering
-    // instead - light entering the ring diffuses inside and glows out -
-    // which transmits LIGHT but not the image of the far-side band:
-    //  - LIVE (this page): Babylon's realtime translucency approximates it
-    //  - EXPORT: the Export GLB handler patches the ScatteringSkull-style
-    //    extension set (KHR_materials_diffuse_transmission / volume /
-    //    volume_scatter / ior) onto this material, see RING_SSS_EXTENSIONS
+    // would show through sharply and the text overlaps illegibly. The milky
+    // translucency of the real ring comes from rough refraction instead
+    // (KHR_materials_volume spec: roughness affects both reflection and
+    // transmission, so the see-through image is heavily blurred):
+    //  - LIVE (this page): Babylon's realtime translucency approximates the
+    //    soft light bleed (realtime refraction only samples the .env, see
+    //    the Materials comment above, so true rough refraction is export-only)
+    //  - EXPORT: the Export GLB handler patches rough transmissive glass
+    //    (KHR_materials_transmission / volume / ior, roughness 0.4) onto
+    //    this material, see RING_FROST_EXTENSIONS
     var frostMat = new BABYLON.PBRMaterial("frostMat", scene);
     frostMat.albedoColor = new BABYLON.Color3(0.93, 0.93, 0.91);
     frostMat.metallic = 0;
-    frostMat.roughness = 0.55;
+    frostMat.roughness = 0.4;   // = RING_FROST_ROUGHNESS in the export
     frostMat.subSurface.isTranslucencyEnabled = true;
     frostMat.subSurface.translucencyIntensity = 0.8;
     // Warm paper-white transmission tint (older Babylon builds without the
@@ -1139,42 +1141,39 @@ function setCrystalExportMode(s, on) {
   if (mapFront) mapFront.setEnabled(on);
 }
 
-// ---------- Subsurface scattering for the white rings (export patch) ----------
-// The frosted year rings (frostMat) should read as milky translucent
-// acrylic: light entering the ring scatters inside and glows through, like
-// the Khronos ScatteringSkull sample. The dense-volume recipe for that is
-// KHR_materials_diffuse_transmission + KHR_materials_volume +
-// KHR_materials_volume_scatter (+ ior). Babylon's serializer cannot emit
-// this combination from a PBRMaterial (volume_scatter only exports from
-// OpenPBRMaterial, and diffuse_transmission only for zero-thickness thin
-// setups), so the extensions are patched into the exported GLB's JSON
-// chunk here instead. Supported by Babylon.js and the Khronos glTF Sample
-// Viewer; viewers without these extensions fall back to the plain opaque
-// frosted look (none are listed in extensionsRequired).
-var RING_SSS_EXTENSIONS = {
+// ---------- Frosted glass for the white rings (export patch) ----------
+// The frosted year rings (frostMat) are exported as rough transmissive
+// glass: KHR_materials_transmission + KHR_materials_volume (+ ior) with
+// base roughness 0.4. Per the volume spec, the refractive microfacet BTDF
+// roughens transmission along with reflection, so whatever sits behind
+// the ring shows through heavily blurred - the milky frosted look - while
+// the volume attenuation warms thick light paths. Patched into the
+// exported GLB's JSON chunk so the factors stay deterministic. Viewers
+// without transmission support fall back to the plain opaque frosted look
+// (nothing is listed in extensionsRequired).
+var RING_FROST_ROUGHNESS = 0.4;
+var RING_FROST_EXTENSIONS = {
   KHR_materials_ior: { ior: 1.49 },              // acrylic
-  KHR_materials_diffuse_transmission: {
-    diffuseTransmissionFactor: 1.0,
-    diffuseTransmissionColorFactor: [0.98, 0.97, 0.94]   // warm paper white
+  KHR_materials_transmission: {
+    transmissionFactor: 1.0
   },
   KHR_materials_volume: {
     thicknessFactor: 0.35,                       // ~ ring height (0.374)
     attenuationColor: [0.98, 0.96, 0.9],
     attenuationDistance: 0.5
-  },
-  KHR_materials_volume_scatter: {
-    multiscatterColorFactor: [0.92, 0.92, 0.9]   // near-white multiscatter
   }
 };
 
-function addRingScatterToGltf(json) {
+function addRingFrostToGltf(json) {
   var used = json.extensionsUsed = json.extensionsUsed || [];
-  Object.keys(RING_SSS_EXTENSIONS).forEach(function (name) {
+  Object.keys(RING_FROST_EXTENSIONS).forEach(function (name) {
     if (used.indexOf(name) < 0) used.push(name);
   });
   (json.materials || []).forEach(function (mat) {
     if (mat.name !== "frostMat") return;
-    mat.extensions = Object.assign({}, mat.extensions, RING_SSS_EXTENSIONS);
+    mat.extensions = Object.assign({}, mat.extensions, RING_FROST_EXTENSIONS);
+    mat.pbrMetallicRoughness = mat.pbrMetallicRoughness || {};
+    mat.pbrMetallicRoughness.roughnessFactor = RING_FROST_ROUGHNESS;
   });
 }
 
@@ -1188,7 +1187,7 @@ function patchGlbArrayBuffer(buf) {
   var jsonLen = dv.getUint32(12, true);
   var json = JSON.parse(
     new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
-  addRingScatterToGltf(json);
+  addRingFrostToGltf(json);
   var enc = new TextEncoder().encode(JSON.stringify(json));
   var pad = (4 - (enc.length % 4)) % 4;
   var rest = new Uint8Array(buf).subarray(20 + jsonLen);
@@ -1205,7 +1204,7 @@ function patchGlbArrayBuffer(buf) {
   return out.buffer;
 }
 
-function patchRingScatterInGlbData(glb) {
+function patchRingFrostInGlbData(glb) {
   var files = glb.files || glb.glTFFiles || {};
   var names = Object.keys(files).filter(function (n) {
     return /\.glb$/i.test(n);
@@ -1233,7 +1232,7 @@ document.getElementById("exportGlb").addEventListener("click", function () {
     }
   }).then(function (glb) {
     setCrystalExportMode(scene, false);
-    return patchRingScatterInGlbData(glb).then(function () {
+    return patchRingFrostInGlbData(glb).then(function () {
       glb.downloadFiles();
       btn.disabled = false;
       btn.textContent = "Export GLB";
