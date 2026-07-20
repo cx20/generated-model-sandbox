@@ -82,8 +82,8 @@ var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, 
 //    Winkel Tripel world map etched on the wall of the scoop
 //  - Year rings: slotted discs that clip onto the panel's side edge
 //    (no center rod - held by the clip and stacking alone);
-//    milestone rings ("5/10 Years") are translucent blue glass, the white
-//    rings are milky frosted glass (exported as rough-refraction
+//    milestone rings ("5/10 Years") are cobalt transmissive glass like
+//    the sail, the white rings are milky frosted glass (exported as rough-refraction
 //    KHR_materials_transmission/volume, roughness 0.4), and all
 //    ring lettering is embossed (baked highlight/shadow passes)
 // ============================================================
@@ -136,21 +136,26 @@ var createScene = async function () {
     hemi.intensity = 0.35;
 
     // ---------- Materials ----------
-    // Two rendering modes share these materials:
-    //  - LIVE (this page): plain alpha blending. Babylon's realtime
-    //    subSurface refraction can only sample the .env texture - not the
-    //    scene behind the glass - so with refraction on, the monolith reads
-    //    as a mirror slab and the rings/inscription behind it disappear.
-    //    Alpha blending shows the actual scene through the glass.
+    // The blue glass (sail + milestone rings) is physical crystal in BOTH
+    // rendering modes: albedo white, alpha 1, subSurface refraction ON, so
+    // the cobalt color comes purely from the volume attenuation (tintColor
+    // applied over the thickness, Beer-Lambert style). That is exactly what
+    // the exported KHR_materials_transmission / ior / volume / dispersion
+    // produce in glTF viewers, so live and GLB match. Babylon's realtime
+    // refraction samples only the .env by default, so - like frostMat below -
+    // these materials get the opaque-pass texture (opaqueRTT, created once
+    // all meshes exist) as their refraction background, the live equivalent
+    // of the glTF loader's TransmissionHelper.
+    // Only clearGlass still differs between the two modes:
+    //  - LIVE (this page): plain alpha blending. With refraction on, the
+    //    big monolith would read as a mirror slab and the inscription
+    //    inside it would disappear; alpha blending shows the actual scene
+    //    through the glass. The subSurface parameters below are inert while
+    //    isRefractionEnabled is false.
     //  - EXPORT: the Export GLB handler (bottom of the file) temporarily
-    //    flips these materials to physical crystal - albedo white, alpha 1,
-    //    subSurface refraction ON - so Babylon's serializer emits
-    //    KHR_materials_transmission / ior / volume (+attenuation) /
-    //    dispersion, then restores the live settings. glTF viewers with
-    //    transmission support then render true crystal, with the cobalt
-    //    color coming from volume attenuation (thicker = deeper blue).
-    // The subSurface parameters are pre-configured here (inert while
-    // isRefractionEnabled is false).
+    //    flips it to crystal - albedo white, alpha 1, refraction ON - so
+    //    Babylon's serializer emits the transmission extensions, then
+    //    restores the live settings.
     var clearGlass = new BABYLON.PBRMaterial("clearGlass", scene);
     clearGlass.albedoColor = new BABYLON.Color3(0.9, 0.93, 0.95);
     clearGlass.metallic = 0;
@@ -169,13 +174,15 @@ var createScene = async function () {
     clearGlass.environmentIntensity = 1.2;
 
     var blueGlass = new BABYLON.PBRMaterial("blueGlass", scene);
-    // Same cobalt blue as the milestone rings (mileMat below), so the sail
-    // and the "5/10 Years" rings read as the same glass. The subSurface tint
-    // mirrors this color for the exported volume attenuation.
-    blueGlass.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
+    // Cobalt crystal, colored purely by volume attenuation (see the
+    // Materials comment above): the albedo stays white and the tint below
+    // darkens light paths through the wedge - thickness 1.2 at tint
+    // distance 0.6 squares the tint to the deep navy of the real trophy.
+    // Same glass as the milestone rings (mileMat below).
+    blueGlass.albedoColor = new BABYLON.Color3(1, 1, 1);
     blueGlass.metallic = 0;
     blueGlass.roughness = 0.06;
-    blueGlass.alpha = 0.8;
+    blueGlass.subSurface.isRefractionEnabled = true;
     blueGlass.subSurface.refractionIntensity = 1.0;
     blueGlass.subSurface.indexOfRefraction = 1.52;
     blueGlass.subSurface.minimumThickness = 0;
@@ -185,9 +192,9 @@ var createScene = async function () {
     // Subtle rainbow fringing on the crystal edges (KHR_materials_dispersion)
     blueGlass.subSurface.isDispersionEnabled = true;
     blueGlass.subSurface.dispersion = 0.15;
+    // subSurface.refractionTexture is assigned where opaqueRTT is created
     blueGlass.backFaceCulling = false;
     blueGlass.twoSidedLighting = true;
-    blueGlass.separateCullingPass = true;
 
     // ---------- Trophy body ----------
     // Lift the whole trophy a hair off the ground. The sail bottom (BASE_Y=0)
@@ -745,25 +752,25 @@ var createScene = async function () {
     frostMat.backFaceCulling = false;
     frostMat.twoSidedLighting = true;
 
-    // Milestone rings ("5 Years" / "10 Years"): translucent cobalt-blue
-    // glass, like the real ring; alpha 0.8 keeps the front label legible.
-    // The subSurface parameters are for the export-time crystal flip (see
-    // the Materials comment above), with a smaller thickness scale to match
-    // the ring's size.
+    // Milestone rings ("5 Years" / "10 Years"): the same cobalt crystal as
+    // the sail (see the Materials comment above), with a smaller thickness
+    // scale to match the ring's size. Alpha stays 1: refraction is not
+    // linked to transparency, so the ring keeps writing depth and the
+    // raised silver label band on top stays legible.
     var mileMat = new BABYLON.PBRMaterial("mileMat", scene);
-    mileMat.albedoColor = new BABYLON.Color3(0.02, 0.12, 0.55);
+    mileMat.albedoColor = new BABYLON.Color3(1, 1, 1);
     mileMat.metallic = 0;
     mileMat.roughness = 0.05;
-    mileMat.alpha = 0.8;
+    mileMat.subSurface.isRefractionEnabled = true;
     mileMat.subSurface.refractionIntensity = 1.0;
     mileMat.subSurface.indexOfRefraction = 1.52;
     mileMat.subSurface.minimumThickness = 0;
     mileMat.subSurface.maximumThickness = 0.6;
     mileMat.subSurface.tintColor = new BABYLON.Color3(0.04, 0.22, 0.8);
     mileMat.subSurface.tintColorAtDistance = 0.35;
+    // subSurface.refractionTexture is assigned where opaqueRTT is created
     mileMat.backFaceCulling = false;
     mileMat.twoSidedLighting = true;
-    mileMat.separateCullingPass = true;
     mileMat.environmentIntensity = 1.1;
 
     // Felt lining inside the notch
@@ -885,9 +892,6 @@ var createScene = async function () {
         var body = BABYLON.MeshBuilder.ExtrudePolygon("ringBody_" + label,
             { shape: cProfile, depth: ringH }, scene, earcut);
         body.material = milestone ? mileMat : frostMat;
-        if (milestone) {
-            body.alphaIndex = 2;   // glass body draws before its band (3)
-        }
         body.parent = stack;
 
         // Felt lining inside the notch (both walls + inner end pad)
@@ -1060,33 +1064,38 @@ var createScene = async function () {
     ground.material = groundMat;
     ground.receiveShadows = true;
 
-    // The frosted ring bodies are excluded: their refraction samples the
+    // The refractive glass is excluded: those materials sample the
     // opaque-pass texture (opaqueRTT below) with main-camera screen
     // coordinates, which are wrong in the mirror pass and would reflect as
-    // a black column. The felt notch linings go with them - without the
-    // bodies around them they would reflect as a stack of dark boxes.
-    // The label bands and the milestone rings still reflect, which reads
-    // fine at this mirror level.
+    // black shapes - the frosted ring bodies, the blue sail and the
+    // milestone rings all go. The felt notch linings go with them - without
+    // the bodies around them they would reflect as a stack of dark boxes.
+    // The label bands, the MVP logo and the clear panel still reflect,
+    // which reads fine at this mirror level.
     mirror.renderList = scene.meshes.filter(function (m) {
         return m !== ground && m.material !== frostMat
-            && m.material !== feltMat;
+            && m.material !== feltMat && m.material !== blueGlass
+            && m.material !== mileMat;
     });
 
-    // ---------- Opaque-pass texture for the frosted rings ----------
+    // ---------- Opaque-pass texture for the refractive glass ----------
     // Live equivalent of the glTF loader's TransmissionHelper, with the same
     // settings (1024px, half float, 4x MSAA, mips with LOD offset -4, image
     // processing off so the texture stays linear, clear color in linear
-    // space with alpha 0). Everything except the frosted ring bodies renders
-    // into it; assigning it as frostMat's refraction texture makes the rings
+    // space with alpha 0). Everything except the refractive glass itself
+    // (frosted ring bodies, blue sail, milestone rings - the helper also
+    // excludes all transmissive meshes from its opaque pass) renders into
+    // it; assigning it as those materials' refraction texture makes them
     // refract the actual scene behind them - panel, label bands, skybox -
     // blurred by the material roughness, instead of sampling only the .env.
-    // The texture is a render target, so the PBR material renders it
+    // The texture is a render target, so the PBR materials render it
     // automatically each frame; no customRenderTargets entry is needed.
     var opaqueRTT = new BABYLON.RenderTargetTexture("opaqueSceneTexture",
         1024, scene, true, undefined, BABYLON.Constants.TEXTURETYPE_HALF_FLOAT);
     opaqueRTT.ignoreCameraViewport = true;
     opaqueRTT.renderList = scene.meshes.filter(function (m) {
-        return m.material !== frostMat;
+        return m.material !== frostMat && m.material !== blueGlass
+            && m.material !== mileMat;
     });
     opaqueRTT.clearColor = scene.clearColor.toLinearSpace();
     opaqueRTT.clearColor.a = 0;
@@ -1096,6 +1105,8 @@ var createScene = async function () {
     opaqueRTT.samples = 4;
     opaqueRTT.disableImageProcessing = true;
     frostMat.subSurface.refractionTexture = opaqueRTT;
+    blueGlass.subSurface.refractionTexture = opaqueRTT;
+    mileMat.subSurface.refractionTexture = opaqueRTT;
 
     // ---------- Shadows ----------
     var sg = new BABYLON.ShadowGenerator(1024, dirLight);
@@ -1147,14 +1158,16 @@ window.addEventListener("resize", function () {
 // The desk is scenery, not part of the trophy, so it is excluded - this
 // matches the mesh set in the committed export.
 
-// Flip the glass materials between the LIVE look (alpha blending, colored
-// albedo) and the EXPORT crystal look (albedo white, alpha 1, subSurface
+// Flip clearGlass between the LIVE look (alpha blending, colored albedo)
+// and the EXPORT crystal look (albedo white, alpha 1, subSurface
 // refraction ON). With refraction on, Babylon's glTF serializer emits
-// KHR_materials_transmission / ior / volume / dispersion; the cobalt color
-// then comes from the volume attenuation (subSurface.tintColor), already
-// configured on the materials. See the Materials section in createScene.
+// KHR_materials_transmission / ior / volume; the tint comes from the
+// volume attenuation (subSurface.tintColor), already configured on the
+// material. The blue glass (blueGlass / mileMat) is in crystal mode live
+// as well, so it exports as-is and needs no flip - see the Materials
+// section in createScene.
 function setCrystalExportMode(s, on) {
-  ["clearGlass", "blueGlass", "mileMat"].forEach(function (name) {
+  ["clearGlass"].forEach(function (name) {
     var m = s.getMaterialByName(name);
     if (!m) return;
     if (on) {
