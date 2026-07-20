@@ -32,15 +32,15 @@
     {
       "name": "camera",
       "translation": [
-        4.381198406219482,
-        5.0414719581604,
-        -10.979835510253906
+        4.8116607666015625,
+        3.2297616004943848,
+        3.8802385330200195
       ],
       "rotation": [
-        -0.018502050232082873,
-        0.9783408566642714,
-        0.10057649002247579,
-        0.1799755872239888
+        0.047173042723742176,
+        -0.42143620462734094,
+        -0.02195849003214353,
+        -0.9053640474570496
       ],
       "camera": 0
     },
@@ -3310,17 +3310,17 @@
     {
       "buffer": 0,
       "byteOffset": 755828,
+      "byteLength": 11448
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 767276,
       "byteLength": 888
     },
     {
       "buffer": 0,
-      "byteOffset": 756716,
+      "byteOffset": 768164,
       "byteLength": 12
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 756728,
-      "byteLength": 11448
     },
     {
       "buffer": 0,
@@ -3350,12 +3350,12 @@
     {
       "buffer": 0,
       "byteOffset": 825848,
-      "byteLength": 2340
+      "byteLength": 12
     },
     {
       "buffer": 0,
-      "byteOffset": 828188,
-      "byteLength": 12
+      "byteOffset": 825860,
+      "byteLength": 2340
     },
     {
       "buffer": 0,
@@ -3771,21 +3771,21 @@
     {
       "bufferView": 234,
       "componentType": 5123,
-      "count": 444,
+      "count": 5724,
       "type": "SCALAR",
       "byteOffset": 0
     },
     {
       "bufferView": 235,
       "componentType": 5123,
-      "count": 6,
+      "count": 444,
       "type": "SCALAR",
       "byteOffset": 0
     },
     {
       "bufferView": 236,
       "componentType": 5123,
-      "count": 5724,
+      "count": 6,
       "type": "SCALAR",
       "byteOffset": 0
     },
@@ -4015,14 +4015,14 @@
     {
       "bufferView": 242,
       "componentType": 5123,
-      "count": 1170,
+      "count": 6,
       "type": "SCALAR",
       "byteOffset": 0
     },
     {
       "bufferView": 243,
       "componentType": 5123,
-      "count": 6,
+      "count": 1170,
       "type": "SCALAR",
       "byteOffset": 0
     },
@@ -6626,13 +6626,30 @@
           1
         ],
         "metallicFactor": 0,
-        "roughnessFactor": 0.55
+        "roughnessFactor": 0.4
       },
       "emissiveFactor": [
         0,
         0,
         0
-      ]
+      ],
+      "extensions": {
+        "KHR_materials_volume": {
+          "thicknessFactor": 0.35,
+          "attenuationColor": [
+            0.98,
+            0.96,
+            0.9
+          ],
+          "attenuationDistance": 0.5
+        },
+        "KHR_materials_ior": {
+          "ior": 1.49
+        },
+        "KHR_materials_transmission": {
+          "transmissionFactor": 1
+        }
+      }
     },
     {
       "name": "feltMat",

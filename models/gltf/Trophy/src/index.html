@@ -82,7 +82,9 @@ var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, 
 //    Winkel Tripel world map etched on the wall of the scoop
 //  - Year rings: slotted discs that clip onto the panel's side edge
 //    (no center rod - held by the clip and stacking alone);
-//    milestone rings ("5/10 Years") are translucent blue glass and all
+//    milestone rings ("5/10 Years") are translucent blue glass, the white
+//    rings are milky frosted glass (exported as rough-refraction
+//    KHR_materials_transmission/volume, roughness 0.4), and all
 //    ring lettering is embossed (baked highlight/shadow passes)
 // ============================================================
 
@@ -113,9 +115,16 @@ var createScene = async function () {
     camera.useAutoRotationBehavior = true;
     camera.autoRotationBehavior.idleRotationSpeed = 0.12;
 
-    scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
-        "textures/environment.env", scene);
+    // IBL + skybox: prefiltered papermill environment hosted in the
+    // cx20/gltf-test repo. The same cubemap drives the PBR lighting and is
+    // shown unblurred as the visible background.
+    var envTex = BABYLON.CubeTexture.CreateFromPrefilteredData(
+        "https://cx20.github.io/gltf-test/textures/env/papermillSpecularHDR.env",
+        scene);
+    scene.environmentTexture = envTex;
     scene.environmentIntensity = 1.0;
+    // Creates the "hdrSkyBox" mesh (excluded from the GLB export below).
+    scene.createDefaultSkybox(envTex, true, 1000);
 
     var dirLight = new BABYLON.DirectionalLight("dir",
         new BABYLON.Vector3(-0.4, -1, 0.6), scene);
@@ -709,12 +718,29 @@ var createScene = async function () {
     var ringH  = 0.374;    // ring thickness (height; 0.34 x 1.1)
 
     // Frosted-glass ring body material.
-    // Kept opaque: if translucent, the far-side label band shows through
-    // and the text overlaps illegibly.
+    // Alpha stays 1 (opaque): if alpha-translucent, the far-side label band
+    // would show through sharply and the text overlaps illegibly. The milky
+    // translucency of the real ring comes from rough refraction instead
+    // (KHR_materials_volume spec: roughness affects both reflection and
+    // transmission, so the see-through image is heavily blurred):
+    //  - LIVE (this page): Babylon's realtime translucency approximates the
+    //    soft light bleed (realtime refraction only samples the .env, see
+    //    the Materials comment above, so true rough refraction is export-only)
+    //  - EXPORT: the Export GLB handler patches rough transmissive glass
+    //    (KHR_materials_transmission / volume / ior, roughness 0.4) onto
+    //    this material, see RING_FROST_EXTENSIONS
     var frostMat = new BABYLON.PBRMaterial("frostMat", scene);
     frostMat.albedoColor = new BABYLON.Color3(0.93, 0.93, 0.91);
     frostMat.metallic = 0;
-    frostMat.roughness = 0.55;
+    frostMat.roughness = 0.4;   // = RING_FROST_ROUGHNESS in the export
+    frostMat.subSurface.isTranslucencyEnabled = true;
+    frostMat.subSurface.translucencyIntensity = 0.8;
+    // Warm paper-white transmission tint (older Babylon builds without the
+    // property simply ignore the assignment guard).
+    if ("translucencyColor" in frostMat.subSurface) {
+        frostMat.subSurface.translucencyColor =
+            new BABYLON.Color3(0.98, 0.97, 0.94);
+    }
     frostMat.backFaceCulling = false;
     frostMat.twoSidedLighting = true;
 
@@ -1115,6 +1141,84 @@ function setCrystalExportMode(s, on) {
   if (mapFront) mapFront.setEnabled(on);
 }
 
+// ---------- Frosted glass for the white rings (export patch) ----------
+// The frosted year rings (frostMat) are exported as rough transmissive
+// glass: KHR_materials_transmission + KHR_materials_volume (+ ior) with
+// base roughness 0.4. Per the volume spec, the refractive microfacet BTDF
+// roughens transmission along with reflection, so whatever sits behind
+// the ring shows through heavily blurred - the milky frosted look - while
+// the volume attenuation warms thick light paths. Patched into the
+// exported GLB's JSON chunk so the factors stay deterministic. Viewers
+// without transmission support fall back to the plain opaque frosted look
+// (nothing is listed in extensionsRequired).
+var RING_FROST_ROUGHNESS = 0.4;
+var RING_FROST_EXTENSIONS = {
+  KHR_materials_ior: { ior: 1.49 },              // acrylic
+  KHR_materials_transmission: {
+    transmissionFactor: 1.0
+  },
+  KHR_materials_volume: {
+    thicknessFactor: 0.35,                       // ~ ring height (0.374)
+    attenuationColor: [0.98, 0.96, 0.9],
+    attenuationDistance: 0.5
+  }
+};
+
+function addRingFrostToGltf(json) {
+  var used = json.extensionsUsed = json.extensionsUsed || [];
+  Object.keys(RING_FROST_EXTENSIONS).forEach(function (name) {
+    if (used.indexOf(name) < 0) used.push(name);
+  });
+  (json.materials || []).forEach(function (mat) {
+    if (mat.name !== "frostMat") return;
+    mat.extensions = Object.assign({}, mat.extensions, RING_FROST_EXTENSIONS);
+    mat.pbrMetallicRoughness = mat.pbrMetallicRoughness || {};
+    mat.pbrMetallicRoughness.roughnessFactor = RING_FROST_ROUGHNESS;
+  });
+}
+
+// Rebuild a GLB with the ring extensions applied to its JSON chunk.
+// Layout per spec: 12-byte header, then chunk 0 (JSON, space-padded to a
+// 4-byte boundary), then the remaining chunks (BIN), which are copied
+// through untouched.
+function patchGlbArrayBuffer(buf) {
+  var dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x46546C67) return buf;   // not "glTF"
+  var jsonLen = dv.getUint32(12, true);
+  var json = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+  addRingFrostToGltf(json);
+  var enc = new TextEncoder().encode(JSON.stringify(json));
+  var pad = (4 - (enc.length % 4)) % 4;
+  var rest = new Uint8Array(buf).subarray(20 + jsonLen);
+  var out = new Uint8Array(20 + enc.length + pad + rest.length);
+  var odv = new DataView(out.buffer);
+  odv.setUint32(0, 0x46546C67, true);                     // "glTF"
+  odv.setUint32(4, dv.getUint32(4, true), true);          // version
+  odv.setUint32(8, out.length, true);                     // total length
+  odv.setUint32(12, enc.length + pad, true);              // JSON chunk length
+  odv.setUint32(16, 0x4E4F534A, true);                    // "JSON"
+  out.set(enc, 20);
+  for (var p = 0; p < pad; p++) out[20 + enc.length + p] = 0x20;
+  out.set(rest, 20 + enc.length + pad);
+  return out.buffer;
+}
+
+function patchRingFrostInGlbData(glb) {
+  var files = glb.files || glb.glTFFiles || {};
+  var names = Object.keys(files).filter(function (n) {
+    return /\.glb$/i.test(n);
+  });
+  return Promise.all(names.map(function (n) {
+    var f = files[n];
+    var toBuf = f instanceof Blob ? f.arrayBuffer() : Promise.resolve(f);
+    return toBuf.then(function (buf) {
+      files[n] = new Blob([patchGlbArrayBuffer(buf)],
+                          { type: "model/gltf-binary" });
+    });
+  }));
+}
+
 document.getElementById("exportGlb").addEventListener("click", function () {
   var btn = this;
   if (!scene) return;
@@ -1124,13 +1228,15 @@ document.getElementById("exportGlb").addEventListener("click", function () {
   setCrystalExportMode(scene, true);
   BABYLON.GLTF2Export.GLBAsync(scene, "Trophy", {
     shouldExportNode: function (node) {
-      return node.name !== "ground";
+      return node.name !== "ground" && node.name !== "hdrSkyBox";
     }
   }).then(function (glb) {
     setCrystalExportMode(scene, false);
-    glb.downloadFiles();
-    btn.disabled = false;
-    btn.textContent = "Export GLB";
+    return patchRingFrostInGlbData(glb).then(function () {
+      glb.downloadFiles();
+      btn.disabled = false;
+      btn.textContent = "Export GLB";
+    });
   }).catch(function (e) {
     setCrystalExportMode(scene, false);
     console.error("GLB export failed:", e);
