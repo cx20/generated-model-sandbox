@@ -115,9 +115,17 @@ var createScene = async function () {
     camera.useAutoRotationBehavior = true;
     camera.autoRotationBehavior.idleRotationSpeed = 0.12;
 
-    scene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
-        "textures/environment.env", scene);
+    // IBL + skybox: prefiltered papermill environment hosted in the
+    // cx20/gltf-test repo. The same cubemap drives the PBR lighting and is
+    // shown as the visible background (blur 0.3 keeps the backdrop softly
+    // out of focus behind the trophy).
+    var envTex = BABYLON.CubeTexture.CreateFromPrefilteredData(
+        "https://cx20.github.io/gltf-test/textures/env/papermillSpecularHDR.env",
+        scene);
+    scene.environmentTexture = envTex;
     scene.environmentIntensity = 1.0;
+    // Creates the "hdrSkyBox" mesh (excluded from the GLB export below).
+    scene.createDefaultSkybox(envTex, true, 1000, 0.3);
 
     var dirLight = new BABYLON.DirectionalLight("dir",
         new BABYLON.Vector3(-0.4, -1, 0.6), scene);
@@ -1222,7 +1230,7 @@ document.getElementById("exportGlb").addEventListener("click", function () {
   setCrystalExportMode(scene, true);
   BABYLON.GLTF2Export.GLBAsync(scene, "Trophy", {
     shouldExportNode: function (node) {
-      return node.name !== "ground";
+      return node.name !== "ground" && node.name !== "hdrSkyBox";
     }
   }).then(function (glb) {
     setCrystalExportMode(scene, false);
