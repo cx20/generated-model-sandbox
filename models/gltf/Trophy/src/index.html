@@ -887,10 +887,40 @@ var createScene = async function () {
     // Parent LAST (whether carved or not) - see the bake note above.
     baseDisc.parent = stack;
 
+    // Replace the flat facet normals on an extruded ring's outer rim with
+    // smooth radial normals, leaving the cap faces and notch walls alone.
+    // See the call site in createRing for why.
+    function smoothRimNormals(mesh) {
+        var pos = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+        var nrm = mesh.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+        for (var vi = 0; vi < pos.length; vi += 3) {
+            var x = pos[vi], z = pos[vi + 2];
+            var r = Math.hypot(x, z);
+            if (r < 1e-4) continue;
+            if (Math.abs(nrm[vi + 1]) > 0.5) continue;   // top/bottom cap face
+            // Only rim walls: their normal already points roughly outward.
+            // Notch walls point ~+/-Z (radialDot < 0.7), so they're skipped.
+            if ((nrm[vi] * x + nrm[vi + 2] * z) / r < 0.7) continue;
+            nrm[vi] = x / r;
+            nrm[vi + 1] = 0;
+            nrm[vi + 2] = z / r;
+        }
+        mesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, nrm);
+    }
+
     function createRing(label, milestone) {
         // Body: the XZ-plane profile is extruded along -Y (no rotation needed)
         var body = BABYLON.MeshBuilder.ExtrudePolygon("ringBody_" + label,
             { shape: cProfile, depth: ringH }, scene, earcut);
+        // ExtrudePolygon builds the curved rim as flat facets: every segment
+        // gets one constant face normal and the vertices are split at each
+        // seam, so on the glossy glass the ~96 facets read as vertical lines.
+        // Smooth just the rim - for each side-wall vertex whose normal already
+        // points outward, replace it with the exact radial normal at that
+        // vertex's own angle. Cap faces (|ny| ~ 1) and the flat notch walls
+        // (normal ~ +/-Z, not radial) fail the tests below and keep their
+        // crisp edges.
+        smoothRimNormals(body);
         body.material = milestone ? mileMat : frostMat;
         body.parent = stack;
 
