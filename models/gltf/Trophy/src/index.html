@@ -905,7 +905,12 @@ var createScene = async function () {
             nrm[vi + 1] = 0;
             nrm[vi + 2] = z / r;
         }
-        mesh.updateVerticesData(BABYLON.VertexBuffer.NormalKind, nrm);
+        // setVerticesData (not updateVerticesData): ExtrudePolygon builds the
+        // normal buffer non-updatable, so updateVerticesData would be a no-op
+        // and the live scene would keep the flat facets even though the data
+        // is correct. setVerticesData recreates the buffer, so the smoothed
+        // normals actually reach the GPU.
+        mesh.setVerticesData(BABYLON.VertexBuffer.NormalKind, nrm, false);
     }
 
     function createRing(label, milestone) {
