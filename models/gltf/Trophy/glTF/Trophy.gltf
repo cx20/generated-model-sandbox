@@ -1,6 +1,6 @@
 {
   "asset": {
-    "generator": "Babylon.js v9.17.0",
+    "generator": "Babylon.js v9.17.1",
     "version": "2.0"
   },
   "extensionsUsed": [
@@ -32,15 +32,15 @@
     {
       "name": "camera",
       "translation": [
-        4.8116607666015625,
-        3.2297616004943848,
-        3.8802385330200195
+        0.25768759846687317,
+        3.082069158554077,
+        -3.970425844192505
       ],
       "rotation": [
-        0.047173042723742176,
-        -0.42143620462734094,
-        -0.02195849003214353,
-        -0.9053640474570496
+        -0.00043852386541997864,
+        0.9981498067970398,
+        0.06036716253077986,
+        0.007250838197223115
       ],
       "camera": 0
     },
@@ -6628,12 +6628,16 @@
         "metallicFactor": 0,
         "roughnessFactor": 0.4
       },
-      "emissiveFactor": [
-        0,
-        0,
-        0
-      ],
       "extensions": {
+        "KHR_materials_dispersion": {
+          "dispersion": 0
+        },
+        "KHR_materials_ior": {
+          "ior": 1.49
+        },
+        "KHR_materials_transmission": {
+          "transmissionFactor": 1
+        },
         "KHR_materials_volume": {
           "thicknessFactor": 0.35,
           "attenuationColor": [
@@ -6642,14 +6646,13 @@
             0.9
           ],
           "attenuationDistance": 0.5
-        },
-        "KHR_materials_ior": {
-          "ior": 1.49
-        },
-        "KHR_materials_transmission": {
-          "transmissionFactor": 1
         }
-      }
+      },
+      "emissiveFactor": [
+        0,
+        0,
+        0
+      ]
     },
     {
       "name": "feltMat",
